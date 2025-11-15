@@ -35,3 +35,9 @@ credentials.json
 *.pem
 *.key
 .env
+
+# PyInstaller build artifacts
+build/
+dist/
+*.spec.bak
+*.exe
