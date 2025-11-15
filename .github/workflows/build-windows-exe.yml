@@ -1,0 +1,78 @@
+name: Build Windows Executable
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'cobalt-name-editor/**'
+      - '.github/workflows/build-windows-exe.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'cobalt-name-editor/**'
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        working-directory: ./cobalt-name-editor
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Build executable with PyInstaller
+        working-directory: ./cobalt-name-editor
+        run: |
+          pyinstaller cobalt-name-editor.spec
+
+      - name: Test executable exists
+        working-directory: ./cobalt-name-editor
+        run: |
+          if (Test-Path "dist/cobalt-name-editor.exe") {
+            Write-Host "Executable built successfully"
+            Get-Item "dist/cobalt-name-editor.exe" | Select-Object Name, Length, LastWriteTime
+          } else {
+            Write-Error "Executable not found!"
+            exit 1
+          }
+
+      - name: Upload Windows executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: cobalt-name-editor-windows
+          path: cobalt-name-editor/dist/cobalt-name-editor.exe
+          retention-days: 90
+
+      - name: Create Release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: Cobalt Name Editor v1.0.${{ github.run_number }}
+          body: |
+            Automated build of Cobalt Name Editor for Windows
+
+            ## Download
+            - Download `cobalt-name-editor.exe` below
+            - Double-click to run (no installation needed)
+            - Access the web interface at http://localhost:5050
+
+            Built from commit: ${{ github.sha }}
+          files: |
+            cobalt-name-editor/dist/cobalt-name-editor.exe
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

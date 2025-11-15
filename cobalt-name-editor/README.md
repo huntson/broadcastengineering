@@ -1,28 +1,19 @@
-# Cobalt Name Editor - Windows Version
+# Cobalt Name Editor - Windows Standalone
 
-A web-based tool for managing device names on Cobalt hardware units. This version is configured to run on Windows using Docker Desktop.
+A web-based tool for managing device names on Cobalt hardware units. This is a standalone Windows executable - no installation or dependencies required.
 
-## Prerequisites
+## Download
 
-- **Docker Desktop for Windows** (with WSL2 backend recommended)
-  - Download from: https://www.docker.com/products/docker-desktop/
-  - Ensure Docker Desktop is running before proceeding
+Download the latest `cobalt-name-editor.exe` from the [Releases page](https://github.com/huntson/broadcastengineering/releases).
 
-## Installation & Setup
+## Quick Start
 
-1. **Clone this repository** (if not already done):
-   ```bash
-   git clone https://github.com/huntson/broadcastengineering
-   cd broadcastengineering/cobalt-name-editor
-   ```
+1. **Download** `cobalt-name-editor.exe` from Releases
+2. **Double-click** the executable to run
+3. **Open your browser** to `http://localhost:5050`
+4. **Start editing** your Cobalt device names
 
-2. **Build and start the container**:
-   ```bash
-   docker-compose up -d --build
-   ```
-
-3. **Access the web interface**:
-   - Open your browser and navigate to: `http://localhost:5050`
+That's it! No installation, no Docker, no Python needed.
 
 ## Usage
 
@@ -42,69 +33,86 @@ A web-based tool for managing device names on Cobalt hardware units. This versio
 
 ## Windows-Specific Notes
 
+### Running the Application
+- The executable opens a console window showing the Flask server logs
+- **Keep this console window open** while using the application
+- The web interface runs at `http://localhost:5050`
+- Close the console window to stop the server
+
 ### Port Configuration
-- The service runs on port **5050** (mapped from container port 5000)
-- If port 5050 is already in use, edit `docker-compose.yml` and change:
-  ```yaml
-  ports:
-    - "5050:5000"  # Change 5050 to another available port
+- Default port: **5050**
+- If port 5050 is in use, edit `main.py` and change the port number in the last line:
+  ```python
+  app.run(debug=True, host="0.0.0.0", port=5050)  # Change 5050 to another port
   ```
+- Then rebuild with PyInstaller (see Developer section)
 
-### Accessing Devices on Your Network
-- Ensure your Windows firewall allows Docker to communicate with devices on your local network
-- If using WSL2, Docker Desktop handles network bridging automatically
-- Test connectivity: `ping <device-ip>` from PowerShell/CMD
+### Firewall & Network Access
+- Windows Firewall may prompt you to allow the application
+- Click **Allow access** to enable communication with Cobalt devices
+- Ensure devices are on the same network or accessible via routing
 
-### File Paths
-- Windows paths work seamlessly with Docker Desktop
-- Temporary files are stored in the container's temp directory
-
-## Management Commands
-
-### View logs:
-```bash
-docker-compose logs -f
-```
-
-### Stop the service:
-```bash
-docker-compose down
-```
-
-### Restart the service:
-```bash
-docker-compose restart
-```
-
-### Rebuild after code changes:
-```bash
-docker-compose up -d --build
-```
+### Accessing Devices
+- Test device connectivity: `ping <device-ip>` from Command Prompt
+- Verify devices are powered on and network-accessible
+- Check that device IPs are correct
 
 ## Troubleshooting
 
-### Container won't start
-- Ensure Docker Desktop is running
-- Check if port 5050 is available: `netstat -ano | findstr :5050`
+### Application won't start
+- Check if port 5050 is already in use
+- Run as Administrator if you encounter permission errors
+- Check Windows Event Viewer for error details
 
 ### Can't reach devices
 - Verify device IP addresses are correct
 - Check Windows Firewall settings
-- Ensure devices are on the same network or accessible via routing
+- Ensure devices are on the same network
 
-### Permission errors
-- Run PowerShell/CMD as Administrator if needed
-- Check Docker Desktop's WSL integration settings
+### Web interface doesn't open
+- Manually navigate to `http://localhost:5050` in your browser
+- Try `http://127.0.0.1:5050` if localhost doesn't work
+- Check the console window for error messages
+
+## For Developers
+
+### Building from Source
+
+1. **Install Python 3.12+**
+2. **Clone the repository**:
+   ```bash
+   git clone https://github.com/huntson/broadcastengineering
+   cd broadcastengineering/cobalt-name-editor
+   ```
+
+3. **Install dependencies**:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+4. **Build the executable**:
+   ```bash
+   pyinstaller cobalt-name-editor.spec
+   ```
+
+5. **Find the executable**:
+   ```
+   dist/cobalt-name-editor.exe
+   ```
+
+### Running in Development Mode
+```bash
+python main.py
+```
+Then open `http://localhost:5000`
 
 ## Architecture
 
 - **Backend**: Flask (Python 3.12)
 - **Frontend**: Bootstrap 5 with vanilla JavaScript
-- **Container**: Docker with Linux base image (runs via WSL2 on Windows)
+- **Packaging**: PyInstaller for standalone Windows executable
+- **Auto-builds**: GitHub Actions creates releases automatically
 
 ## Support
 
-For issues specific to this Windows deployment, check:
-1. Docker Desktop logs
-2. Container logs: `docker-compose logs`
-3. Windows Event Viewer for system-level errors
+For issues or feature requests, please [open an issue](https://github.com/huntson/broadcastengineering/issues).
