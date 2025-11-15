@@ -1,0 +1,9 @@
+version: "3.9"
+
+services:
+  editor:
+    build: .
+    container_name: cobalt-name-editor
+    ports:
+      - "5050:5000"
+    restart: unless-stopped
