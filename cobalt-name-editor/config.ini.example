@@ -1,0 +1,21 @@
+[server]
+# Host to bind the web server to (0.0.0.0 allows access from other machines)
+host = 0.0.0.0
+
+# Port to run the web server on
+port = 5050
+
+# Enable debug mode (set to false for production)
+debug = true
+
+[devices]
+# Default device IPs (comma-separated)
+# These will be shown in the UI if no localStorage value exists
+default_ips = 127.0.0.1
+
+[timeouts]
+# Timeout for downloading device configs (seconds)
+download_timeout = 10
+
+# Timeout for uploading device configs (seconds)
+upload_timeout = 30

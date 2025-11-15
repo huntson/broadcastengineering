@@ -55,9 +55,10 @@
   <form id="dlForm" class="row gy-2 gx-2 align-items-end">
     <div class="col-auto">
       <textarea class="form-control"
+                id="device_ips"
                 name="device_ips"
-                placeholder="10.96.50.160, 10.96.50.161"
-                rows="2">10.96.50.166, 10.96.50.167</textarea>
+                placeholder="127.0.0.1"
+                rows="2">127.0.0.1</textarea>
     </div>
     <div class="col-auto">
       <button type="submit" class="btn btn-primary">Download</button>
@@ -118,18 +119,35 @@
     const conflictWarning       = document.getElementById('conflict-warning');
     const retryBtn              = document.getElementById('retry-download');
     const forceOverrideCheckbox = document.getElementById('force-override');
+    const deviceIpsTextarea     = document.getElementById('device_ips');
 
     let token = null, names = [];
+
+    // Load saved IPs from localStorage on page load
+    window.addEventListener('DOMContentLoaded', () => {
+      const savedIps = localStorage.getItem('cobalt_device_ips');
+      if (savedIps) {
+        deviceIpsTextarea.value = savedIps;
+      }
+    });
+
+    // Save IPs to localStorage when changed
+    deviceIpsTextarea.addEventListener('input', () => {
+      localStorage.setItem('cobalt_device_ips', deviceIpsTextarea.value);
+    });
 
     // Unified download logic with override support
     async function startDownload(override) {
       conflictWarning.style.display = 'none';
 
       // Parse IP list
-      const ipsRaw = document.querySelector('textarea[name="device_ips"]').value;
+      const ipsRaw = deviceIpsTextarea.value;
       const ips = ipsRaw.split(',')
                          .map(ip => ip.trim())
                          .filter(ip => ip);
+
+      // Save to localStorage
+      localStorage.setItem('cobalt_device_ips', ipsRaw);
 
       // Fetch via JSON
       const res = await fetch('/download', {

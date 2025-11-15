@@ -8,11 +8,35 @@ import tempfile
 import os
 import requests
 import concurrent.futures
+import configparser
+from pathlib import Path
 
+
+# Load configuration
+config = configparser.ConfigParser()
+config_path = Path(__file__).parent / 'config.ini'
+
+# If config.ini doesn't exist, copy from example
+if not config_path.exists():
+    example_path = Path(__file__).parent / 'config.ini.example'
+    if example_path.exists():
+        import shutil
+        shutil.copy(example_path, config_path)
+
+config.read(config_path)
+
+# Get config values with defaults
+HOST = config.get('server', 'host', fallback='0.0.0.0')
+PORT = config.getint('server', 'port', fallback=5050)
+DEBUG = config.getboolean('server', 'debug', fallback=True)
+DOWNLOAD_TIMEOUT = config.getint('timeouts', 'download_timeout', fallback=10)
+UPLOAD_TIMEOUT = config.getint('timeouts', 'upload_timeout', fallback=30)
 
 app = Flask(__name__)
 
-def upload_and_capture(ip: str, file_text: str, timeout: int = 30) -> str:
+def upload_and_capture(ip: str, file_text: str, timeout: int = None) -> str:
+    if timeout is None:
+        timeout = UPLOAD_TIMEOUT
     base = ip if ip.startswith("http") else f"http://{ip}"
     base = base.rstrip("/")
     url  = f"{base}/cgi-bin/update-config.cgi"
@@ -41,7 +65,7 @@ def download():
     texts, errs = [], {}
     for ip in ips:
         try:
-            texts.append(download_config(ip))
+            texts.append(download_config(ip, timeout=DOWNLOAD_TIMEOUT))
         except Exception as e:
             errs[ip] = str(e)
 
@@ -110,4 +134,4 @@ def save():
     return jsonify(results=results), http_code
 
 if __name__ == '__main__':
-    app.run(debug=True, host="0.0.0.0", port=5050)
+    app.run(debug=DEBUG, host=HOST, port=PORT)

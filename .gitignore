@@ -36,6 +36,9 @@ credentials.json
 *.key
 .env
 
+# User configuration (each user should have their own)
+cobalt-name-editor/config.ini
+
 # PyInstaller build artifacts
 build/
 *.spec.bak
