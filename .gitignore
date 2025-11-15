@@ -38,6 +38,8 @@ credentials.json
 
 # PyInstaller build artifacts
 build/
-dist/
 *.spec.bak
+
+# Ignore exe files except in dist folder (where releases go)
 *.exe
+!cobalt-name-editor/dist/*.exe
