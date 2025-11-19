@@ -13,7 +13,9 @@ from pathlib import Path
 import tkinter as tk
 import sys
 import argparse
+import threading
 from license import LicenseManager, LicenseStatus, storage as license_storage
+from gui import CobaltGUI
 
 
 # Load configuration
@@ -196,8 +198,11 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Cobalt Name Editor')
     parser.add_argument('-f', '--force', action='store_true',
                         help='Force run without license (testing only)')
+    parser.add_argument('--console', action='store_true',
+                        help='Run in console mode without GUI')
     args = parser.parse_args()
 
+    # License check
     if args.force:
         print("\n" + "="*60)
         print("⚠️  RUNNING UNLICENSED (Testing Mode)")
@@ -213,10 +218,26 @@ if __name__ == '__main__':
             input()
             exit(1)
 
-        # License valid - start Flask server
         print("\n" + "="*60)
         print("✓ License validated")
         print("="*60)
 
-    print(f"\nStarting Cobalt Name Editor on http://{HOST}:{PORT}\n")
-    app.run(debug=DEBUG, host=HOST, port=PORT)
+    # Start server based on mode
+    if args.console:
+        # Console mode - original behavior
+        print(f"\nStarting Cobalt Name Editor on http://{HOST}:{PORT}\n")
+        app.run(debug=DEBUG, host=HOST, port=PORT)
+    else:
+        # GUI mode - run Flask in background thread
+        print(f"Starting Cobalt Name Editor on http://{HOST}:{PORT}")
+
+        def run_flask():
+            app.run(debug=False, host=HOST, port=PORT, use_reloader=False)
+
+        # Start Flask in daemon thread
+        flask_thread = threading.Thread(target=run_flask, daemon=True)
+        flask_thread.start()
+
+        # Create and run GUI
+        gui = CobaltGUI(HOST, PORT)
+        gui.run()
