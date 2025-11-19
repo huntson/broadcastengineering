@@ -139,14 +139,18 @@ def save():
 
 def check_license():
     """Show license dialog and verify before starting Flask."""
+    print("Checking license...")
+
     root = tk.Tk()
     root.withdraw()  # Hide main window
+    root.update()  # Process pending events
 
     license_valid = False
 
     def on_status_change(status: LicenseStatus):
         nonlocal license_valid
         license_valid = status.ok
+        print(f"License status changed: ok={status.ok}, reason={status.reason}")
         if status.ok:
             root.quit()  # Exit Tkinter loop when valid
 
@@ -155,12 +159,19 @@ def check_license():
         on_status_change=on_status_change
     )
 
+    print(f"Initial license status: ok={manager.status.ok}, reason={manager.status.reason}")
+
     manager.ensure_dialog()  # Show dialog if not licensed
 
     if not license_valid:
+        print("License not valid - showing dialog and waiting for user input...")
+        root.deiconify()  # Make sure root is visible for the dialog
+        root.lift()  # Bring to front
         root.mainloop()  # Block until license validated
+        print("License dialog closed")
 
     root.destroy()
+    print(f"License check complete: valid={license_valid}")
     return license_valid
 
 if __name__ == '__main__':

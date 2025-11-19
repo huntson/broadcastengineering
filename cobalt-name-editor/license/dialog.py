@@ -76,14 +76,18 @@ class LicenseManager:
         if self._dialog and self._dialog.winfo_exists():
             self._dialog.deiconify()
             self._dialog.lift()
-            self._dialog.focus_set()
+            self._dialog.focus_force()
             return
         self._dialog = tk.Toplevel(self.root)
         self._dialog.title("Cobalt Name Editor - License")
         self._dialog.configure(bg="#1e1e1e")
         self._dialog.resizable(False, False)
         self._dialog.protocol("WM_DELETE_WINDOW", self._on_close)
-        self._dialog.transient(self.root)
+        # Don't make transient - this can cause visibility issues on Windows
+        # self._dialog.transient(self.root)
+        # Make sure the dialog appears on top
+        self._dialog.attributes('-topmost', True)
+        self._dialog.after(100, lambda: self._dialog.attributes('-topmost', False))
 
         container = tk.Frame(self._dialog, bg="#1e1e1e", padx=16, pady=16)
         container.pack(fill=tk.BOTH, expand=True)
@@ -173,6 +177,11 @@ class LicenseManager:
 
         self._dialog.bind("<Return>", lambda _event: self._on_verify())
         self._dialog.bind("<Escape>", lambda _event: self._on_close())
+
+        # Ensure dialog is visible and has focus
+        self._dialog.deiconify()
+        self._dialog.lift()
+        self._dialog.focus_force()
         self._dialog.after(10, name_entry.focus_set)
 
         self._status_var.set(self.status.reason if not self.status.ok else "License validated")
