@@ -10,6 +10,10 @@ import requests
 import concurrent.futures
 import configparser
 from pathlib import Path
+import tkinter as tk
+import sys
+import argparse
+from license import LicenseManager, LicenseStatus
 
 
 # Load configuration
@@ -133,5 +137,58 @@ def save():
     http_code = 200 if all("FAILED" not in v for v in results.values()) else 207
     return jsonify(results=results), http_code
 
+def check_license():
+    """Show license dialog and verify before starting Flask."""
+    root = tk.Tk()
+    root.withdraw()  # Hide main window
+
+    license_valid = False
+
+    def on_status_change(status: LicenseStatus):
+        nonlocal license_valid
+        license_valid = status.ok
+        if status.ok:
+            root.quit()  # Exit Tkinter loop when valid
+
+    manager = LicenseManager(
+        root,
+        on_status_change=on_status_change
+    )
+
+    manager.ensure_dialog()  # Show dialog if not licensed
+
+    if not license_valid:
+        root.mainloop()  # Block until license validated
+
+    root.destroy()
+    return license_valid
+
 if __name__ == '__main__':
+    # Parse command-line arguments
+    parser = argparse.ArgumentParser(description='Cobalt Name Editor')
+    parser.add_argument('-f', '--force', action='store_true',
+                        help='Force run without license (testing only)')
+    args = parser.parse_args()
+
+    if args.force:
+        print("\n" + "="*60)
+        print("⚠️  RUNNING UNLICENSED (Testing Mode)")
+        print("="*60)
+    else:
+        # Check license before starting server
+        if not check_license():
+            print("\n" + "="*60)
+            print("ERROR: Valid license required to run Cobalt Name Editor")
+            print("="*60)
+            print("\nPlease contact your administrator for a license key.")
+            print("\nPress Enter to exit...")
+            input()
+            exit(1)
+
+        # License valid - start Flask server
+        print("\n" + "="*60)
+        print("✓ License validated")
+        print("="*60)
+
+    print(f"\nStarting Cobalt Name Editor on http://{HOST}:{PORT}\n")
     app.run(debug=DEBUG, host=HOST, port=PORT)
