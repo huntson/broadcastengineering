@@ -79,6 +79,31 @@ def save_ips():
     license_storage.save_settings(settings)
     return jsonify(success=True)
 
+@app.route("/get_default_names", methods=["GET"])
+def get_default_names():
+    """Retrieve saved default device names from persistent storage."""
+    settings = license_storage.load_settings()
+    default_names = settings.get("default_names", "")
+    if default_names:
+        # Parse JSON array from string
+        try:
+            names = json.loads(default_names)
+            return jsonify(names=names)
+        except:
+            return jsonify(names=[])
+    return jsonify(names=[])
+
+@app.route("/save_default_names", methods=["POST"])
+def save_default_names():
+    """Save current device names as default template."""
+    data = request.get_json()
+    names = data.get("names", [])
+    settings = license_storage.load_settings()
+    # Store as JSON array string
+    settings["default_names"] = json.dumps(names)
+    license_storage.save_settings(settings)
+    return jsonify(success=True, count=len(names))
+
 @app.route("/download", methods=["POST"])
 def download():
     data = request.get_json()

@@ -92,9 +92,18 @@
       <input class="form-control" id="sheetURL" type="url"/>
       <button class="btn btn-outline-secondary" id="syncBtn">Sync</button>
     </div>
-    <button type="button" id="normalize-btn" class="btn btn-secondary mb-3">
-      Default Names
-    </button>
+
+    <div class="btn-group mb-3" role="group">
+      <button type="button" id="load-default-btn" class="btn btn-secondary">
+        Load Default Names
+      </button>
+      <button type="button" id="save-default-btn" class="btn btn-outline-secondary">
+        Save as Default
+      </button>
+      <button type="button" id="factory-reset-btn" class="btn btn-outline-secondary">
+        Factory Reset (CCFS)
+      </button>
+    </div>
 
     <h3>Step 3 – upload</h3>
     <form id="uploadForm" class="row gy-2 gx-2 align-items-end">
@@ -216,15 +225,75 @@
     dlForm.onsubmit = e => { e.preventDefault(); startDownload(false); };
     retryBtn.onclick = () => startDownload(forceOverrideCheckbox.checked);
 
-    // Default-names button
-    document.getElementById('normalize-btn').addEventListener('click', () => {
+    // Load Default Names button
+    document.getElementById('load-default-btn').addEventListener('click', async () => {
+      try {
+        const response = await fetch('/get_default_names');
+        const data = await response.json();
+
+        if (data.names && data.names.length > 0) {
+          const inputs = Array.from(document.querySelectorAll('#nameTable input'));
+          const savedDefaults = data.names;
+
+          // Apply saved defaults (pad with CCFS if needed)
+          inputs.forEach((input, i) => {
+            if (i < savedDefaults.length) {
+              input.value = savedDefaults[i];
+              names[i] = savedDefaults[i];
+            } else {
+              // Fill remaining with CCFS pattern
+              const name = `CCFS ${String(i + 1).padStart(2, '0')}`;
+              input.value = name;
+              names[i] = name;
+            }
+          });
+
+          renderTable();
+          alert(`Loaded ${savedDefaults.length} default names from settings`);
+        } else {
+          alert('No default names saved yet. Use "Save as Default" to learn a name set.');
+        }
+      } catch (error) {
+        console.error('Failed to load default names:', error);
+        alert('Failed to load default names');
+      }
+    });
+
+    // Save as Default button
+    document.getElementById('save-default-btn').addEventListener('click', async () => {
       const inputs = Array.from(document.querySelectorAll('#nameTable input'));
-      const defaultNames = inputs.map((_, i) =>
-        `CCFS ${String(i + 1).padStart(2, '0')}`
-      );
-      defaultNames.forEach((name, idx) => inputs[idx].value = name);
-      names = defaultNames.slice();
-      renderTable();
+      const currentNames = inputs.map(i => i.value.trim());
+
+      if (confirm(`Save these ${currentNames.length} names as your default template?`)) {
+        try {
+          const response = await fetch('/save_default_names', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ names: currentNames })
+          });
+          const data = await response.json();
+
+          if (data.success) {
+            alert(`Saved ${data.count} names as default template!`);
+          }
+        } catch (error) {
+          console.error('Failed to save default names:', error);
+          alert('Failed to save default names');
+        }
+      }
+    });
+
+    // Factory Reset button (original CCFS pattern)
+    document.getElementById('factory-reset-btn').addEventListener('click', () => {
+      if (confirm('Reset all names to factory default (CCFS 01, CCFS 02, etc.)?')) {
+        const inputs = Array.from(document.querySelectorAll('#nameTable input'));
+        const defaultNames = inputs.map((_, i) =>
+          `CCFS ${String(i + 1).padStart(2, '0')}`
+        );
+        defaultNames.forEach((name, idx) => inputs[idx].value = name);
+        names = defaultNames.slice();
+        renderTable();
+      }
     });
 
     // Render the editable table
