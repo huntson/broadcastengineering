@@ -131,30 +131,6 @@ def download():
 
     return jsonify(token=token, names=extract_names(texts[0]))
 
-@app.route('/sync', methods=['POST'])
-def sync():
-    token     = request.form.get('token')
-    sheet_url = request.form.get('sheet_url')
-
-    if not token:
-        return jsonify(error="Missing token"), 400
-
-    tmpdir = tempfile.gettempdir()
-    orig_path = f"{tmpdir}/{token}.orig"
-
-    if not os.path.exists(orig_path):
-        return jsonify(error="Invalid or expired token"), 400
-
-    original = open(orig_path).read()
-
-    # TODO: Replace this with actual sheet parsing logic
-    names = []  # e.g. names = pull_names(sheet_url)
-
-    new_config = render_config(original, names)
-    with open(orig_path, "w") as f:
-        f.write(new_config)
-
-    return jsonify(names=names)
 
 def threaded_upload(ip, newfile):
     try:
@@ -167,8 +143,13 @@ def save():
     token  = request.form["token"]
     names  = json.loads(request.form["names"])
     tmpdir = tempfile.gettempdir()
-    orig   = open(f"{tmpdir}/{token}.orig").read()
-    ips    = [l.strip() for l in open(f"{tmpdir}/{token}.ips") if l.strip()]
+
+    with open(f"{tmpdir}/{token}.orig") as f:
+        orig = f.read()
+
+    with open(f"{tmpdir}/{token}.ips") as f:
+        ips = [l.strip() for l in f if l.strip()]
+
     newfile = render_config(orig, names)
 
     results = {}
@@ -183,8 +164,6 @@ def save():
 
 def check_license():
     """Show license dialog and verify before starting Flask."""
-    print("Checking license...")
-
     root = tk.Tk()
     root.withdraw()  # Hide main window
     root.update()  # Process pending events
@@ -194,7 +173,6 @@ def check_license():
     def on_status_change(status: LicenseStatus):
         nonlocal license_valid
         license_valid = status.ok
-        print(f"License status changed: ok={status.ok}, reason={status.reason}")
         if status.ok:
             root.quit()  # Exit Tkinter loop when valid
 
@@ -203,19 +181,14 @@ def check_license():
         on_status_change=on_status_change
     )
 
-    print(f"Initial license status: ok={manager.status.ok}, reason={manager.status.reason}")
-
     manager.ensure_dialog()  # Show dialog if not licensed
 
     if not license_valid:
-        print("License not valid - showing dialog and waiting for user input...")
         root.deiconify()  # Make sure root is visible for the dialog
         root.lift()  # Bring to front
         root.mainloop()  # Block until license validated
-        print("License dialog closed")
 
     root.destroy()
-    print(f"License check complete: valid={license_valid}")
     return license_valid
 
 if __name__ == '__main__':

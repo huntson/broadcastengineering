@@ -84,14 +84,8 @@
   <hr/>
 
   <div id="editor" style="display:none">
-    <h3>Step 2 – edit or sync</h3>
+    <h3>Step 2 – edit names</h3>
     <table class="table" id="nameTable"></table>
-
-    <div class="input-group my-3">
-      <span class="input-group-text">Google Sheet URL</span>
-      <input class="form-control" id="sheetURL" type="url"/>
-      <button class="btn btn-outline-secondary" id="syncBtn">Sync</button>
-    </div>
 
     <div class="btn-group mb-3" role="group">
       <button type="button" id="load-default-btn" class="btn btn-secondary">
@@ -309,23 +303,6 @@
           </td>
         </tr>`).join('');
     }
-
-    // Sync with Google Sheet
-    document.getElementById('syncBtn').onclick = async () => {
-      const sheetURL = document.getElementById('sheetURL').value;
-      if (!sheetURL) return;
-      const fd = new FormData();
-      fd.append('token', token);
-      fd.append('sheet_url', sheetURL);
-      const r = await fetch('/sync', { method: 'POST', body: fd });
-      if (!r.ok) {
-        alert('Sheet error: ' + await r.text());
-        return;
-      }
-      const js = await r.json();
-      names.splice(0, names.length, ...js.names);
-      renderTable();
-    };
 
     // Upload edited names
     document.getElementById('uploadForm').onsubmit = async e => {
