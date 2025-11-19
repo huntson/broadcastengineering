@@ -13,7 +13,7 @@ from pathlib import Path
 import tkinter as tk
 import sys
 import argparse
-from license import LicenseManager, LicenseStatus
+from license import LicenseManager, LicenseStatus, storage as license_storage
 
 
 # Load configuration
@@ -59,6 +59,23 @@ def _identical(texts):
 @app.route('/')
 def index():
     return render_template('index.html')
+
+@app.route("/get_saved_ips", methods=["GET"])
+def get_saved_ips():
+    """Retrieve saved device IPs from persistent storage."""
+    settings = license_storage.load_settings()
+    ips = settings.get("device_ips", "")
+    return jsonify(ips=ips)
+
+@app.route("/save_ips", methods=["POST"])
+def save_ips():
+    """Save device IPs to persistent storage."""
+    data = request.get_json()
+    ips = data.get("ips", "")
+    settings = license_storage.load_settings()
+    settings["device_ips"] = ips
+    license_storage.save_settings(settings)
+    return jsonify(success=True)
 
 @app.route("/download", methods=["POST"])
 def download():

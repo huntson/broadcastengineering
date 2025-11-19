@@ -123,17 +123,52 @@
 
     let token = null, names = [];
 
-    // Load saved IPs from localStorage on page load
-    window.addEventListener('DOMContentLoaded', () => {
-      const savedIps = localStorage.getItem('cobalt_device_ips');
-      if (savedIps) {
-        deviceIpsTextarea.value = savedIps;
+    // Load saved IPs from server on page load
+    window.addEventListener('DOMContentLoaded', async () => {
+      try {
+        const response = await fetch('/get_saved_ips');
+        const data = await response.json();
+        if (data.ips) {
+          deviceIpsTextarea.value = data.ips;
+          // Also save to localStorage as backup
+          localStorage.setItem('cobalt_device_ips', data.ips);
+        } else {
+          // Fallback to localStorage if server has no saved IPs
+          const savedIps = localStorage.getItem('cobalt_device_ips');
+          if (savedIps) {
+            deviceIpsTextarea.value = savedIps;
+          }
+        }
+      } catch (error) {
+        console.error('Failed to load saved IPs from server:', error);
+        // Fallback to localStorage on error
+        const savedIps = localStorage.getItem('cobalt_device_ips');
+        if (savedIps) {
+          deviceIpsTextarea.value = savedIps;
+        }
       }
     });
 
-    // Save IPs to localStorage when changed
+    // Save IPs to both server and localStorage when changed
+    let saveTimeout;
     deviceIpsTextarea.addEventListener('input', () => {
-      localStorage.setItem('cobalt_device_ips', deviceIpsTextarea.value);
+      const ipsValue = deviceIpsTextarea.value;
+      // Save to localStorage immediately
+      localStorage.setItem('cobalt_device_ips', ipsValue);
+
+      // Debounce server save to avoid too many requests
+      clearTimeout(saveTimeout);
+      saveTimeout = setTimeout(async () => {
+        try {
+          await fetch('/save_ips', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ips: ipsValue })
+          });
+        } catch (error) {
+          console.error('Failed to save IPs to server:', error);
+        }
+      }, 1000); // Wait 1 second after user stops typing
     });
 
     // Unified download logic with override support
@@ -146,8 +181,17 @@
                          .map(ip => ip.trim())
                          .filter(ip => ip);
 
-      // Save to localStorage
+      // Save to both localStorage and server
       localStorage.setItem('cobalt_device_ips', ipsRaw);
+      try {
+        await fetch('/save_ips', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ips: ipsRaw })
+        });
+      } catch (error) {
+        console.error('Failed to save IPs to server:', error);
+      }
 
       // Fetch via JSON
       const res = await fetch('/download', {
