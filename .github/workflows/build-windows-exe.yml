@@ -55,7 +55,7 @@ jobs:
           path: cobalt-name-editor/dist/cobalt-name-editor.exe
           retention-days: 90
 
-      - name: Create Release
+      - name: Create Versioned Release
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v1
         with:
@@ -73,6 +73,41 @@ jobs:
           files: |
             cobalt-name-editor/dist/cobalt-name-editor.exe
           draft: true
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update Latest Release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: latest
+          name: Latest Build
+          body: |
+            **Latest stable build of Cobalt Name Editor**
+
+            This release is automatically updated with every commit to main.
+
+            ## Download
+            Click the asset below to download the latest version.
+
+            ## Installation
+            1. Download `cobalt-name-editor.exe`
+            2. Double-click to run
+            3. Enter your license key when prompted
+            4. Access the web interface at http://localhost:5050
+
+            **Direct download link (always up-to-date):**
+            ```
+            https://github.com/huntson/broadcastengineering/releases/download/latest/cobalt-name-editor.exe
+            ```
+
+            ---
+            *Built from commit: ${{ github.sha }}*
+            *Version: v1.0.${{ github.run_number }}*
+          files: |
+            cobalt-name-editor/dist/cobalt-name-editor.exe
+          draft: false
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
