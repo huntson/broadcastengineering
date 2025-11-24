@@ -15,20 +15,34 @@ class LogRedirector:
     def __init__(self, text_widget):
         self.text_widget = text_widget
         self.buffer = []
+        self.enabled = True
 
     def write(self, message):
+        # Skip if disabled or widget destroyed
+        if not self.enabled:
+            return
+
         # Add to buffer
         self.buffer.append(message)
 
         # Update GUI (must be done in main thread)
         try:
-            self.text_widget.after(0, self._update_text, message)
+            if self.text_widget.winfo_exists():
+                self.text_widget.after(0, self._update_text, message)
         except:
             pass  # Widget might be destroyed
 
     def _update_text(self, message):
-        self.text_widget.insert(tk.END, message)
-        self.text_widget.see(tk.END)
+        try:
+            if self.enabled and self.text_widget.winfo_exists():
+                self.text_widget.insert(tk.END, message)
+                self.text_widget.see(tk.END)
+        except:
+            pass  # Widget destroyed
+
+    def disable(self):
+        """Disable logging to prevent crashes during shutdown."""
+        self.enabled = False
 
     def flush(self):
         pass  # Required for file-like object
@@ -42,6 +56,10 @@ class CobaltGUI:
         self.port = port
         self.on_quit_callback = on_quit_callback
         self.license_manager = None
+
+        # Save original stdout/stderr
+        self.original_stdout = sys.stdout
+        self.original_stderr = sys.stderr
 
         # Create main window
         self.root = tk.Tk()
@@ -195,8 +213,18 @@ A web-based editor for naming devices on Cobalt OGCP-9000 panels.
     def _on_close(self):
         """Handle window close event."""
         if messagebox.askokcancel("Quit", "Stop the server and quit?"):
+            # Disable log redirector first
+            self.log_redirector.disable()
+
+            # Restore original stdout/stderr
+            sys.stdout = self.original_stdout
+            sys.stderr = self.original_stderr
+
+            # Call quit callback if provided
             if self.on_quit_callback:
                 self.on_quit_callback()
+
+            # Clean up tkinter
             self.root.quit()
             self.root.destroy()
 
