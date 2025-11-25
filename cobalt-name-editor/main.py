@@ -188,7 +188,13 @@ def check_license():
         root.lift()  # Bring to front
         root.mainloop()  # Block until license validated
 
-    root.destroy()
+    # Check if window still exists before destroying
+    try:
+        if root.winfo_exists():
+            root.destroy()
+    except:
+        pass  # Window already destroyed
+
     return license_valid
 
 if __name__ == '__main__':
