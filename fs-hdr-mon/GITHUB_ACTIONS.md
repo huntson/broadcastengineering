@@ -205,13 +205,13 @@ Edit `../.github/workflows/build-fs-hdr-monitor.yml`:
 
 ```yaml
 # Current:
-tag_name: v1.0.${{ github.run_number }}
+tag_name: fs-hdr-monitor-v1.0.${{ github.run_number }}
 
 # Semantic versioning:
-tag_name: v2.0.0  # Manual version
+tag_name: fs-hdr-monitor-v2.0.0  # Manual version
 
 # Date-based:
-tag_name: v${{ github.run_number }}-$(date +%Y%m%d)
+tag_name: fs-hdr-monitor-v${{ github.run_number }}-$(date +%Y%m%d)
 ```
 
 ### Add Icon
