@@ -5,13 +5,8 @@ set -e
 
 echo "Downloading latest cobalt-name-editor.exe..."
 
-# Get the latest release tag
-LATEST_TAG=$(gh release list --repo huntson/broadcastengineering --limit 1 | awk '{print $3}')
-
-echo "Latest version: $LATEST_TAG"
-
-# Download to the dist directory
-gh release download "$LATEST_TAG" --repo huntson/broadcastengineering --pattern "*.exe" --clobber --dir dist
+# Download from the cobalt-name-editor-latest tag
+gh release download cobalt-name-editor-latest --repo huntson/broadcastengineering --pattern "cobalt-name-editor.exe" --clobber --dir dist
 
 echo "✓ Downloaded to dist/cobalt-name-editor.exe"
 ls -lh dist/cobalt-name-editor.exe

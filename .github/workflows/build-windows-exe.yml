@@ -81,8 +81,8 @@ jobs:
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: latest
-          name: Latest Build
+          tag_name: cobalt-name-editor-latest
+          name: Cobalt Name Editor - Latest Build
           body: |
             **Latest stable build of Cobalt Name Editor**
 
@@ -99,7 +99,7 @@ jobs:
 
             **Direct download link (always up-to-date):**
             ```
-            https://github.com/huntson/broadcastengineering/releases/download/latest/cobalt-name-editor.exe
+            https://github.com/huntson/broadcastengineering/releases/download/cobalt-name-editor-latest/cobalt-name-editor.exe
             ```
 
             ---
