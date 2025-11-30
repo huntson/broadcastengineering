@@ -81,6 +81,42 @@ jobs:
             Built from commit: ${{ github.sha }}
           files: |
             fs-hdr-mon/dist/FS-HDR-Monitor.exe
+          draft: true
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update Latest Release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: fs-hdr-monitor-latest
+          name: FS-HDR Monitor - Latest Build
+          body: |
+            **Latest stable build of FS-HDR Monitor**
+
+            This release is automatically updated with every commit to main.
+
+            ## Download
+            Click the asset below to download the latest version.
+
+            ## Installation
+            1. Download `FS-HDR-Monitor.exe`
+            2. Double-click to run
+            3. Enter your license key when prompted
+            4. Configure port on first run
+            5. Access the web interface at http://localhost:5070
+
+            **Direct download link (always up-to-date):**
+            ```
+            https://github.com/huntson/broadcastengineering/releases/download/fs-hdr-monitor-latest/FS-HDR-Monitor.exe
+            ```
+
+            ---
+            *Built from commit: ${{ github.sha }}*
+            *Version: fs-hdr-monitor-v1.0.${{ github.run_number }}*
+          files: |
+            fs-hdr-mon/dist/FS-HDR-Monitor.exe
           draft: false
           prerelease: false
         env:
