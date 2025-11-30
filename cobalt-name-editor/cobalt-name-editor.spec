@@ -9,6 +9,7 @@ a = Analysis(
     datas=[
         ('templates', 'templates'),
         ('license/lic_public.key', 'license'),
+        ('VERSION', '.'),
     ],
     hiddenimports=[
         'flask',

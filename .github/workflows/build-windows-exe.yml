@@ -32,6 +32,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Update VERSION file
+        working-directory: ./cobalt-name-editor
+        run: |
+          echo "1.0.${{ github.run_number }}" | Out-File -FilePath VERSION -Encoding utf8 -NoNewline
+
       - name: Build executable with PyInstaller
         working-directory: ./cobalt-name-editor
         run: |

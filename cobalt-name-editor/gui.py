@@ -337,8 +337,14 @@ class CobaltGUI:
 
     def _show_about(self):
         """Show about dialog."""
-        about_text = """Cobalt Name Editor
-Version 1.0.9
+        # Read version from VERSION file
+        version = "1.0.0"
+        version_file = Path(__file__).parent / 'VERSION'
+        if version_file.exists():
+            version = version_file.read_text().strip()
+
+        about_text = f"""Cobalt Name Editor
+Version {version}
 
 A web-based editor for naming devices on Cobalt OGCP-9000 panels.
 
