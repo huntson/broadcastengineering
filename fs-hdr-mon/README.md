@@ -53,8 +53,9 @@ Pre-built Windows executable available - no Python installation required!
    ```
 
 4. **Access the web interface:**
-   - Open browser to: `http://localhost:5000`
-   - From another PC: `http://<server-ip>:5000`
+   - Open browser to: `http://localhost:5050` (default port)
+   - From another PC: `http://<server-ip>:5050`
+   - Port can be configured on first run or changed in `config.json`
 
 ## Building Standalone .EXE
 
@@ -138,8 +139,8 @@ deployment/
 1. Copy `FS-HDR-Monitor.exe` to desired location
 2. Create `config.json` in the same folder (use `config-example.json` as template)
 3. Edit `config.json` with your FS unit IP addresses
-4. Double-click `FS-HDR-Monitor.exe` to start
-5. Open browser to `http://localhost:5000`
+4. Double-click `FS-HDR-Monitor.exe` to start (will prompt for port on first run)
+5. Open browser to `http://localhost:5050` (or the port you configured)
 
 ### Running as a Windows Service (Optional)
 
@@ -163,7 +164,7 @@ See [CONFIG_README.md](CONFIG_README.md) for detailed configuration documentatio
 {
   "settings": {
     "host": "0.0.0.0",
-    "port": 5000,
+    "port": 5050,
     "poll_interval": 1
   },
   "fs_units": [
@@ -188,7 +189,7 @@ See [CONFIG_README.md](CONFIG_README.md) for detailed configuration documentatio
 - **Recall Presets**: Click preset buttons to recall saved configurations
 
 ### Compact View
-- Access at: `http://localhost:5000/compact`
+- Access at: `http://localhost:5050/compact` (or your configured port)
 - Simplified bullet-point status view
 - Useful for monitoring at-a-glance
 
@@ -200,15 +201,16 @@ See [CONFIG_README.md](CONFIG_README.md) for detailed configuration documentatio
 ## Troubleshooting
 
 ### Application Won't Start
-- **Check port availability**: Port 5000 might be in use
-  - Change `port` in `config.json` to another value (e.g., 5001)
+- **Check port availability**: The configured port might be in use
+  - Change `port` in `config.json` to another value (e.g., 5051, 8080)
+  - Or specify a different port when prompted at startup
 - **Check config.json syntax**: Must be valid JSON
   - Use a JSON validator online or in your editor
 - **Firewall**: Ensure Python/exe is allowed through Windows Firewall
 
 ### Can't Access from Another PC
 - **Host setting**: Change `"host": "127.0.0.1"` to `"host": "0.0.0.0"` in config.json
-- **Firewall**: Allow the port (5000) through Windows Firewall
+- **Firewall**: Allow the configured port (default 5050) through Windows Firewall
 - **Network**: Ensure both PCs are on same network/VLAN
 
 ### FS Units Not Responding

@@ -80,7 +80,7 @@ def get_default_config():
     return {
         "settings": {
             "host": "0.0.0.0",
-            "port": 5000,
+            "port": 5050,
             "poll_interval": 1
         },
         "fs_units": [],
@@ -121,6 +121,44 @@ def save_config(config):
     """Save entire configuration to config.json."""
     with open(CONFIG_FILE, "w") as fh:
         json.dump(config, fh, indent=2)
+
+def prompt_for_port():
+    """Prompt user to confirm or change the port number."""
+    global CONFIG
+    current_port = CONFIG["settings"]["port"]
+
+    print("\n" + "="*60)
+    print("FS-HDR Monitor - Port Configuration")
+    print("="*60)
+    print(f"Current port: {current_port}")
+    print("\nPress ENTER to use current port, or type a new port number (1-65535):")
+    print("="*60)
+
+    try:
+        user_input = input("> ").strip()
+
+        # If empty, keep current port
+        if not user_input:
+            print(f"[init] Using port {current_port}")
+            return
+
+        # Validate and set new port
+        new_port = int(user_input)
+        if not (1 <= new_port <= 65535):
+            print(f"[warn] Invalid port number. Using default {current_port}")
+            return
+
+        # Update config and save
+        CONFIG["settings"]["port"] = new_port
+        save_config(CONFIG)
+        print(f"[init] Port changed to {new_port} and saved to config.json")
+
+    except ValueError:
+        print(f"[warn] Invalid input. Using current port {current_port}")
+    except KeyboardInterrupt:
+        print(f"\n[init] Interrupted. Using port {current_port}")
+    except Exception as e:
+        print(f"[warn] Error during port configuration: {e}. Using port {current_port}")
 
 # Load configuration at startup
 CONFIG = load_config()
@@ -1243,8 +1281,16 @@ load();
 """
 
 if __name__ == "__main__":
+    # Prompt user for port configuration
+    prompt_for_port()
+
+    # Start background polling thread
     threading.Thread(target=poll_loop, daemon=True).start()
+
+    # Get final settings and start Flask
     host = CONFIG["settings"]["host"]
     port = CONFIG["settings"]["port"]
-    print(f"[init] Starting FS-HDR Monitor on {host}:{port}", flush=True)
+    print(f"\n[init] Starting FS-HDR Monitor on {host}:{port}", flush=True)
+    print(f"[init] Open your browser to: http://localhost:{port}", flush=True)
+    print("="*60 + "\n", flush=True)
     app.run(host=host, port=port)
