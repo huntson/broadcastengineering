@@ -1255,35 +1255,51 @@ load();
 """
 
 if __name__ == "__main__":
-    # Initialize Tkinter root (hidden)
-    root = tk.Tk()
-    root.withdraw()  # Hide the main window
+    # Initialize Tkinter root (hidden) for startup dialogs
+    startup_root = tk.Tk()
+    startup_root.withdraw()  # Hide the startup window
 
     # Check license with GUI dialog - exit if invalid
-    license_dialog = LicenseDialog(root, Path(CONFIG_FILE))
+    from gui_dialogs import LicenseDialog, PortSettingsDialog
+    license_dialog = LicenseDialog(startup_root, Path(CONFIG_FILE))
     license_dialog.check_and_show()
 
     # Prompt for port configuration on first run with GUI dialog
     if IS_FIRST_RUN:
-        port_dialog = PortSettingsDialog(root, Path(CONFIG_FILE))
+        port_dialog = PortSettingsDialog(startup_root, Path(CONFIG_FILE))
         new_port = port_dialog.prompt_for_port(CONFIG["settings"]["port"])
         if new_port and new_port != CONFIG["settings"]["port"]:
             CONFIG["settings"]["port"] = new_port
 
+    # Clean up startup root
+    startup_root.destroy()
+
     # Start background polling thread
     threading.Thread(target=poll_loop, daemon=True).start()
 
-    # Get final settings and start Flask
+    # Get final settings
     host = CONFIG["settings"]["host"]
     port = CONFIG["settings"]["port"]
+
+    # Create GUI window
+    from gui import FSHDRMonitorGUI
+
+    def quit_callback():
+        """Called when GUI is closed."""
+        sys.exit(0)
+
+    gui = FSHDRMonitorGUI(host, port, Path(CONFIG_FILE), on_quit_callback=quit_callback)
+
+    # Start Flask in a background thread
     print(f"\n[init] Starting FS-HDR Monitor on {host}:{port}", flush=True)
     print(f"[init] Open your browser to: http://localhost:{port}", flush=True)
     print("="*60 + "\n", flush=True)
 
-    # Run Flask in a separate thread so Tkinter can handle dialogs
-    flask_thread = threading.Thread(target=lambda: app.run(host=host, port=port, use_reloader=False), daemon=True)
+    flask_thread = threading.Thread(
+        target=lambda: app.run(host=host, port=port, use_reloader=False, debug=False),
+        daemon=True
+    )
     flask_thread.start()
 
-    # Keep the main thread alive for potential future GUI interactions
-    # (Flask runs in background thread)
-    flask_thread.join()
+    # Run GUI main loop (blocks until window closed)
+    gui.run()

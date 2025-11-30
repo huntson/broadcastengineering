@@ -154,30 +154,6 @@ class LicenseDialog:
         )
         close_btn.pack(side=tk.RIGHT)
 
-        # Version footer with About link
-        version_frame = tk.Frame(container, bg="#1e1e1e")
-        version_frame.pack(fill=tk.X, pady=(12, 0))
-
-        version_label = tk.Label(
-            version_frame,
-            text=f"FS-HDR Monitor v{__version__}",
-            bg="#1e1e1e",
-            fg="#666",
-            font=("Arial", 8)
-        )
-        version_label.pack(side=tk.LEFT)
-
-        about_link = tk.Label(
-            version_frame,
-            text="About",
-            bg="#1e1e1e",
-            fg="#4CAF50",
-            font=("Arial", 8, "underline"),
-            cursor="hand2"
-        )
-        about_link.pack(side=tk.RIGHT)
-        about_link.bind("<Button-1>", lambda e: self._show_about())
-
         self.dialog.bind("<Return>", lambda _event: self._on_verify())
         self.dialog.bind("<Escape>", lambda _event: self._on_close())
 
@@ -216,17 +192,6 @@ class LicenseDialog:
         self.key_var.set("")
         self.status_var.set("License cleared")
         self.status_label.config(fg="#ff5555")
-
-    def _show_about(self):
-        """Show about dialog."""
-        about_text = f"""FS-HDR Monitor
-Version {__version__}
-Build {__build__}
-
-Web-based monitoring and control dashboard for AJA FS-HDR, FS4, and FS2 framestore units.
-
-© 2025 Broadcast Software Repo"""
-        messagebox.showinfo("About FS-HDR Monitor", about_text)
 
     def _on_close(self):
         """Close the dialog."""
