@@ -6,7 +6,14 @@ Web-based monitoring and control dashboard for AJA FS-HDR, FS4, and FS2 framesto
 
 ## Download
 
-**Latest Release:** [Download FS-HDR-Monitor.exe](https://github.com/huntson/broadcastengineering/releases/latest)
+**Latest Release:** [Download FS-HDR-Monitor.exe](https://github.com/huntson/broadcastengineering/releases/latest/download/FS-HDR-Monitor.exe)
+
+Direct download link (always latest):
+```
+https://github.com/huntson/broadcastengineering/releases/latest/download/FS-HDR-Monitor.exe
+```
+
+Or browse all releases: https://github.com/huntson/broadcastengineering/releases?q=fs-hdr-monitor&expanded=true
 
 Pre-built Windows executable available - no Python installation required!
 
