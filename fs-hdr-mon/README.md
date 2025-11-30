@@ -2,7 +2,7 @@
 
 Web-based monitoring and control dashboard for AJA FS-HDR, FS4, and FS2 framestore units.
 
-[![Build Windows Executable](https://github.com/huntson/broadcastengineering/actions/workflows/build-windows-exe.yml/badge.svg)](https://github.com/huntson/broadcastengineering/actions/workflows/build-windows-exe.yml)
+[![Build FS-HDR Monitor](https://github.com/huntson/broadcastengineering/actions/workflows/build-fs-hdr-monitor.yml/badge.svg)](https://github.com/huntson/broadcastengineering/actions/workflows/build-fs-hdr-monitor.yml)
 
 ## Download
 

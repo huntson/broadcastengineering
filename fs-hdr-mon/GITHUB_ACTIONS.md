@@ -38,7 +38,7 @@ FS-HDR Monitor is configured with **automated CI/CD** using GitHub Actions. Ever
 
 ## Workflow File
 
-**Location:** `.github/workflows/build-windows-exe.yml`
+**Location:** `../.github/workflows/build-fs-hdr-monitor.yml` (at repository root)
 
 ### Triggers
 
@@ -107,7 +107,7 @@ https://github.com/huntson/broadcastengineering/releases/latest/download/FS-HDR-
 You can manually trigger a build without pushing code:
 
 1. Go to: https://github.com/huntson/broadcastengineering/actions
-2. Click "Build Windows Executable" workflow
+2. Click "Build FS-HDR Monitor" workflow
 3. Click "Run workflow" dropdown
 4. Select branch (usually `main`)
 5. Click "Run workflow" button
@@ -120,7 +120,7 @@ You can manually trigger a build without pushing code:
 
 **Badge in README:**
 ```markdown
-[![Build Windows Executable](https://github.com/huntson/broadcastengineering/actions/workflows/build-windows-exe.yml/badge.svg)](https://github.com/huntson/broadcastengineering/actions/workflows/build-windows-exe.yml)
+[![Build FS-HDR Monitor](https://github.com/huntson/broadcastengineering/actions/workflows/build-fs-hdr-monitor.yml/badge.svg)](https://github.com/huntson/broadcastengineering/actions/workflows/build-fs-hdr-monitor.yml)
 ```
 
 **Actions Tab:**
@@ -201,7 +201,7 @@ The version is `v1.0.<github.run_number>`:
 
 ### Change Version Format
 
-Edit `.github/workflows/build-windows-exe.yml`:
+Edit `../.github/workflows/build-fs-hdr-monitor.yml`:
 
 ```yaml
 # Current:
@@ -225,7 +225,7 @@ tag_name: v${{ github.run_number }}-$(date +%Y%m%d)
 
 ### Change Python Version
 
-Edit `.github/workflows/build-windows-exe.yml`:
+Edit `../.github/workflows/build-fs-hdr-monitor.yml`:
 
 ```yaml
 - name: Set up Python
