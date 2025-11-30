@@ -36,6 +36,19 @@ jobs:
           pip install -r fs-hdr-mon/requirements.txt
           pip install pyinstaller
 
+      - name: Update version information
+        run: |
+          $version = "1.0.${{ github.run_number }}"
+          $commit = "${{ github.sha }}".Substring(0, 7)
+          $content = @"
+          `"""Version information for FS-HDR Monitor.`"""
+
+          # This file is automatically updated by GitHub Actions during build
+          __version__ = `"$version`"
+          __build__ = `"$commit`"
+          "@
+          $content | Out-File -FilePath fs-hdr-mon/app/version.py -Encoding utf8
+
       - name: Build executable with PyInstaller
         run: |
           cd fs-hdr-mon
