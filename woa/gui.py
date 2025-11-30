@@ -12,6 +12,7 @@ from client import SimpleKFrameClient
 from window_helpers import FloatingWindowMixin
 from license import LicenseManager, LicenseStatus, storage
 from dialogs.aux_window import AuxWindow
+from __version__ import __version__
 
 class VisualOnAirGUI(FloatingWindowMixin):
     """Visual GUI for displaying on-air status with safe view switching"""
@@ -164,6 +165,17 @@ class VisualOnAirGUI(FloatingWindowMixin):
         """Open the license dialog."""
         if self.license_manager:
             self.license_manager.show_dialog()
+
+    def open_about_window(self):
+        """Show the About dialog with version information."""
+        messagebox.showinfo(
+            "About WOA Monitor",
+            f"WOA (Visual On-Air) Monitor\n\n"
+            f"Version: {__version__}\n\n"
+            f"Monitor Grass Valley K-Frame systems\n"
+            f"Visual on-air status display\n\n"
+            f"© 2025"
+        )
 
     def _license_allows_connection(self) -> bool:
         if self.license_status and self.license_status.ok:
@@ -565,6 +577,8 @@ class VisualOnAirGUI(FloatingWindowMixin):
         window_menu.add_checkbutton(label="Engineering Sources", variable=self.show_engineering_var, command=self.on_engineering_toggle)
         menu_bar.add_cascade(label="Window", menu=window_menu)
         help_menu = tk.Menu(menu_bar, tearoff=0)
+        help_menu.add_command(label="About...", command=self.open_about_window)
+        help_menu.add_separator()
         help_menu.add_command(label="License...", command=self.open_license_window)
         menu_bar.add_cascade(label="Help", menu=help_menu)
 

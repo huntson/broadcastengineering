@@ -36,6 +36,14 @@ jobs:
           pip install -r woa/requirements.txt
           pip install pyinstaller
 
+      - name: Inject version number
+        run: |
+          $version = "1.0.${{ github.run_number }}"
+          $content = "`"``"``"Version information for WOA Monitor.`"``"``"`n`n__version__ = `"$version`""
+          Set-Content -Path "woa/__version__.py" -Value $content
+          Write-Host "Updated version to: $version"
+          Get-Content "woa/__version__.py"
+
       - name: Build executable with PyInstaller
         run: |
           cd woa
