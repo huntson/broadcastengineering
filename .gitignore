@@ -44,6 +44,7 @@ cobalt-name-editor/config.ini
 build/
 *.spec.bak
 
-# Ignore exe files except in dist folder (where releases go)
+# Ignore exe files and download folders
 *.exe
-!cobalt-name-editor/dist/*.exe
+cobalt-name-editor/dist/
+cobalt-name-editor/download/
