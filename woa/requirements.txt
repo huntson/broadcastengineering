@@ -1,0 +1,7 @@
+# Core dependencies for WOA (Visual On-Air) Monitor
+PyNaCl>=1.5.0
+
+# For building standalone .exe with PyInstaller
+# Note: GitHub Actions will install this automatically
+# For local builds: pip install pyinstaller
+pyinstaller>=5.13.0

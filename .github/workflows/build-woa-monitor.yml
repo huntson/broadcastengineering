@@ -1,0 +1,88 @@
+name: Build WOA Monitor
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'woa/**'
+      - 'woa/woa_monitor.spec'
+      - 'woa/requirements.txt'
+      - '.github/workflows/build-woa-monitor.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'woa/**'
+      - 'woa/woa_monitor.spec'
+      - 'woa/requirements.txt'
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r woa/requirements.txt
+          pip install pyinstaller
+
+      - name: Build executable with PyInstaller
+        run: |
+          cd woa
+          pyinstaller woa_monitor.spec
+
+      - name: Test executable exists
+        run: |
+          if (Test-Path "woa/dist/woa_monitor.exe") {
+            Write-Host "Executable built successfully"
+            Get-Item "woa/dist/woa_monitor.exe" | Select-Object Name, Length, LastWriteTime
+          } else {
+            Write-Error "Executable not found!"
+            exit 1
+          }
+
+      - name: Upload Windows executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: woa-monitor-windows
+          path: woa/dist/woa_monitor.exe
+          retention-days: 90
+
+      - name: Create Release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: woa-v1.0.${{ github.run_number }}
+          name: WOA Monitor v1.0.${{ github.run_number }}
+          body: |
+            Automated build of WOA (Visual On-Air) Monitor for Windows
+
+            ## Download
+            - Download `woa_monitor.exe` below
+            - Double-click to run (no installation needed)
+            - Enter your license key when prompted
+
+            ## What's Included
+            - Standalone Windows executable (no Python required)
+            - Monitor Grass Valley K-Frame systems
+            - Visual on-air status display
+            - Auxiliary outputs window
+            - License key management
+
+            Built from commit: ${{ github.sha }}
+          files: |
+            woa/dist/woa_monitor.exe
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
