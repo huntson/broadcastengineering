@@ -86,3 +86,39 @@ jobs:
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update woa-latest release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: woa-latest
+          name: WOA Monitor (Latest)
+          body: |
+            Latest automated build of WOA (Visual On-Air) Monitor for Windows
+
+            ## Download
+            - Download `woa_monitor.exe` below
+            - Double-click to run (no installation needed)
+            - Enter your license key when prompted
+
+            ## Permalink
+            Always get the latest version:
+            ```
+            https://github.com/huntson/broadcastengineering/releases/download/woa-latest/woa_monitor.exe
+            ```
+
+            ## What's Included
+            - Standalone Windows executable (no Python required)
+            - Monitor Grass Valley K-Frame systems
+            - Visual on-air status display
+            - Auxiliary outputs window
+            - License key management
+
+            Built from commit: ${{ github.sha }}
+            Version: v1.0.${{ github.run_number }}
+          files: |
+            woa/dist/woa_monitor.exe
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
