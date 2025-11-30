@@ -62,7 +62,7 @@ jobs:
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: v1.0.${{ github.run_number }}
+          tag_name: fs-hdr-monitor-v1.0.${{ github.run_number }}
           name: FS-HDR Monitor v1.0.${{ github.run_number }}
           body: |
             Automated build of FS-HDR Monitor for Windows
