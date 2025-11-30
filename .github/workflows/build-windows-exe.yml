@@ -72,7 +72,7 @@ jobs:
             Built from commit: ${{ github.sha }}
           files: |
             cobalt-name-editor/dist/cobalt-name-editor.exe
-          draft: true
+          draft: false
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
