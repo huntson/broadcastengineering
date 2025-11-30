@@ -1,0 +1,8 @@
+# Core dependencies for FS-HDR Monitor
+Flask>=2.3.0
+requests>=2.31.0
+
+# For building standalone .exe with PyInstaller
+# Note: GitHub Actions will install this automatically
+# For local builds: pip install pyinstaller
+pyinstaller>=5.13.0

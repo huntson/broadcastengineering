@@ -1,0 +1,86 @@
+name: Build Windows Executable
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'app/**'
+      - 'fs-hdr-monitor.spec'
+      - 'requirements.txt'
+      - '.github/workflows/build-windows-exe.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'app/**'
+      - 'fs-hdr-monitor.spec'
+      - 'requirements.txt'
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build executable with PyInstaller
+        run: |
+          pyinstaller fs-hdr-monitor.spec
+
+      - name: Test executable exists
+        run: |
+          if (Test-Path "dist/FS-HDR-Monitor.exe") {
+            Write-Host "Executable built successfully"
+            Get-Item "dist/FS-HDR-Monitor.exe" | Select-Object Name, Length, LastWriteTime
+          } else {
+            Write-Error "Executable not found!"
+            exit 1
+          }
+
+      - name: Upload Windows executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: fs-hdr-monitor-windows
+          path: dist/FS-HDR-Monitor.exe
+          retention-days: 90
+
+      - name: Create Release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: FS-HDR Monitor v1.0.${{ github.run_number }}
+          body: |
+            Automated build of FS-HDR Monitor for Windows
+
+            ## Download
+            - Download `FS-HDR-Monitor.exe` below
+            - Create `config.json` in the same folder (see config-example.json)
+            - Double-click to run (no installation needed)
+            - Access the web interface at http://localhost:5000
+
+            ## What's Included
+            - Standalone Windows executable (no Python required)
+            - Monitor AJA FS-HDR, FS4, and FS2 framestore units
+            - Change formats, adjust audio/frame delays, recall presets
+
+            Built from commit: ${{ github.sha }}
+          files: |
+            dist/FS-HDR-Monitor.exe
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
