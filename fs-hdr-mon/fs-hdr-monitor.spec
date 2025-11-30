@@ -8,12 +8,17 @@ a = Analysis(
     binaries=[],
     datas=[
         ('app/config-example.json', '.'),
+        ('app/license/lic_public.key', 'license'),
     ],
     hiddenimports=[
         'flask',
         'requests',
         'threading',
         'json',
+        'nacl',
+        'nacl.signing',
+        'nacl.encoding',
+        'nacl.exceptions',
     ],
     hookspath=[],
     hooksconfig={},

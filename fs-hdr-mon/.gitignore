@@ -45,6 +45,8 @@ Thumbs.db
 # Application specific
 app/config.json
 app/*.log
+app/license.json
+license.json
 
 # Keep example config
 !app/config-example.json

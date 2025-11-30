@@ -7,12 +7,17 @@ Monitor and control AJA FS framestore units
 """
 
 import os
+import sys
 import json
 import threading
 import time
 import re
 import requests
 from flask import Flask, render_template_string, request, redirect, url_for, jsonify, send_file
+
+# License system
+from license.storage import load_cached_license, save_license, clear_license
+from license.verification import verify_name_key
 
 app = Flask(__name__)
 
@@ -74,6 +79,73 @@ def _fs_set_param(ip: str, paramid: str, value):
         timeout=1
     ).raise_for_status()
 
+# ── License Management ────────────────────────────────────────────────────
+def check_license():
+    """Check for valid license. Prompt if needed. Exit if invalid."""
+    print("\n" + "="*60)
+    print("FS-HDR Monitor - License Verification")
+    print("="*60)
+
+    # Try to load cached license
+    cached = load_cached_license()
+    if cached:
+        name = cached["name"]
+        key = cached["key"]
+        is_valid, reason = verify_name_key(name, key)
+
+        if is_valid:
+            print(f"[license] Licensed to: {name}")
+            print("="*60)
+            return True
+        else:
+            print(f"[license] Cached license invalid: {reason}")
+            clear_license()
+
+    # No valid cached license - prompt for one
+    print("\nNo valid license found. Please enter your license details:")
+    print("(Press Ctrl+C to exit)")
+    print("-"*60)
+
+    max_attempts = 3
+    for attempt in range(1, max_attempts + 1):
+        try:
+            name = input("License Name: ").strip()
+            if not name:
+                print("[error] Name cannot be empty")
+                continue
+
+            key = input("License Key: ").strip()
+            if not key:
+                print("[error] Key cannot be empty")
+                continue
+
+            # Verify the license
+            is_valid, reason = verify_name_key(name, key)
+
+            if is_valid:
+                # Save and continue
+                save_license(name, key)
+                print(f"\n[license] License verified and saved!")
+                print(f"[license] Licensed to: {name}")
+                print("="*60)
+                return True
+            else:
+                print(f"\n[error] License verification failed: {reason}")
+                if attempt < max_attempts:
+                    print(f"[error] Attempt {attempt}/{max_attempts}. Please try again.\n")
+                else:
+                    print(f"[error] Maximum attempts reached.")
+
+        except KeyboardInterrupt:
+            print("\n\n[license] License verification cancelled by user.")
+            sys.exit(1)
+        except Exception as e:
+            print(f"\n[error] Unexpected error: {e}")
+
+    print("\n[license] No valid license provided. Exiting.")
+    print("="*60)
+    sys.exit(1)
+
 # ── Configuration Management ──────────────────────────────────────────────
 def get_default_config():
     """Return default configuration structure."""
@@ -93,7 +165,8 @@ def get_default_config():
     }
 
 def load_config():
-    """Load configuration from config.json, create default if missing."""
+    """Load configuration from config.json, create default if missing.
+    Returns (config, is_first_run) tuple."""
     if os.path.exists(CONFIG_FILE):
         try:
             with open(CONFIG_FILE) as fh:
@@ -106,16 +179,17 @@ def load_config():
                     config["fs_units"] = default["fs_units"]
                 if "presets" not in config:
                     config["presets"] = default["presets"]
-                return config
+                return config, False  # Not first run
         except Exception as e:
             print(f"[warn] Error loading config: {e}, using defaults", flush=True)
-            return get_default_config()
+            default = get_default_config()
+            return default, True  # Treat error as first run
     else:
         # Create default config file
         default = get_default_config()
         save_config(default)
         print(f"[init] Created default config at {CONFIG_FILE}", flush=True)
-        return default
+        return default, True  # First run
 
 def save_config(config):
     """Save entire configuration to config.json."""
@@ -161,7 +235,7 @@ def prompt_for_port():
         print(f"[warn] Error during port configuration: {e}. Using port {current_port}")
 
 # Load configuration at startup
-CONFIG = load_config()
+CONFIG, IS_FIRST_RUN = load_config()
 POLL_INTERVAL = CONFIG["settings"]["poll_interval"]
 
 # ── Helper functions for backward compatibility ────────────────────────────
@@ -1281,8 +1355,12 @@ load();
 """
 
 if __name__ == "__main__":
-    # Prompt user for port configuration
-    prompt_for_port()
+    # Check license first - exit if invalid
+    check_license()
+
+    # Prompt user for port configuration only on first run
+    if IS_FIRST_RUN:
+        prompt_for_port()
 
     # Start background polling thread
     threading.Thread(target=poll_loop, daemon=True).start()

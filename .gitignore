@@ -34,6 +34,7 @@ ENV/
 credentials.json
 *.pem
 *.key
+!**/license/lic_public.key
 .env
 
 # User configuration (each user should have their own)
