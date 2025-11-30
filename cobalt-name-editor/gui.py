@@ -6,6 +6,7 @@ import threading
 import sys
 import webbrowser
 from pathlib import Path
+import configparser
 from license import LicenseManager
 
 
@@ -98,6 +99,8 @@ class CobaltGUI:
         file_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="File", menu=file_menu)
         file_menu.add_command(label="Open Web Interface", command=self._open_browser)
+        file_menu.add_separator()
+        file_menu.add_command(label="Settings...", command=self._show_settings_dialog)
         file_menu.add_separator()
         file_menu.add_command(label="Exit", command=self._on_close)
 
@@ -199,6 +202,138 @@ class CobaltGUI:
         if not self.license_manager:
             self.license_manager = LicenseManager(self.root)
         self.license_manager.show_dialog()
+
+    def _show_settings_dialog(self):
+        """Show settings dialog for port configuration."""
+        # Load current config
+        config = configparser.ConfigParser()
+        config_path = Path(__file__).parent / 'config.ini'
+        config.read(config_path)
+        current_port = config.getint('server', 'port', fallback=5050)
+
+        # Create dialog
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Cobalt Name Editor - Settings")
+        dialog.configure(bg="#1e1e1e")
+        dialog.resizable(False, False)
+        dialog.attributes('-topmost', True)
+        dialog.after(100, lambda: dialog.attributes('-topmost', False))
+
+        container = tk.Frame(dialog, bg="#1e1e1e", padx=20, pady=20)
+        container.pack(fill=tk.BOTH, expand=True)
+
+        # Title
+        title = tk.Label(
+            container,
+            text="Server Settings",
+            bg="#1e1e1e",
+            fg="white",
+            font=("Arial", 12, "bold")
+        )
+        title.pack(anchor="w", pady=(0, 15))
+
+        # Port setting
+        port_frame = tk.Frame(container, bg="#1e1e1e")
+        port_frame.pack(fill=tk.X, pady=5)
+
+        port_label = tk.Label(
+            port_frame,
+            text="Server Port:",
+            bg="#1e1e1e",
+            fg="white",
+            width=12,
+            anchor="w"
+        )
+        port_label.pack(side=tk.LEFT)
+
+        port_var = tk.StringVar(value=str(current_port))
+        port_entry = tk.Entry(
+            port_frame,
+            textvariable=port_var,
+            width=10,
+            bg="#3c3c3c",
+            fg="white",
+            insertbackground="white"
+        )
+        port_entry.pack(side=tk.LEFT, padx=10)
+
+        # Status message
+        status_var = tk.StringVar(value="")
+        status_label = tk.Label(
+            container,
+            textvariable=status_var,
+            bg="#1e1e1e",
+            fg="#888",
+            wraplength=300,
+            justify="left"
+        )
+        status_label.pack(fill=tk.X, pady=(10, 10))
+
+        # Buttons
+        button_frame = tk.Frame(container, bg="#1e1e1e")
+        button_frame.pack(fill=tk.X, pady=(10, 0))
+
+        def save_settings():
+            try:
+                new_port = int(port_var.get())
+                if new_port < 1 or new_port > 65535:
+                    messagebox.showerror("Invalid Port", "Port must be between 1 and 65535")
+                    return
+
+                # Update config
+                if not config.has_section('server'):
+                    config.add_section('server')
+                config.set('server', 'port', str(new_port))
+
+                # Save to file
+                with open(config_path, 'w') as f:
+                    config.write(f)
+
+                status_var.set(f"Port updated to {new_port}. Please restart the application for changes to take effect.")
+                status_label.config(fg="#4CAF50")
+
+                # Show restart reminder
+                messagebox.showinfo(
+                    "Settings Saved",
+                    f"Port has been changed to {new_port}.\n\nPlease restart Cobalt Name Editor for the change to take effect."
+                )
+                dialog.destroy()
+            except ValueError:
+                messagebox.showerror("Invalid Port", "Please enter a valid port number")
+
+        save_btn = tk.Button(
+            button_frame,
+            text="Save",
+            command=save_settings,
+            bg="#4CAF50",
+            fg="white",
+            padx=12,
+            pady=6,
+            width=10
+        )
+        save_btn.pack(side=tk.LEFT)
+
+        cancel_btn = tk.Button(
+            button_frame,
+            text="Cancel",
+            command=dialog.destroy,
+            bg="#3c3c3c",
+            fg="white",
+            padx=12,
+            pady=6,
+            width=10
+        )
+        cancel_btn.pack(side=tk.RIGHT)
+
+        # Bind Enter and Escape keys
+        dialog.bind("<Return>", lambda e: save_settings())
+        dialog.bind("<Escape>", lambda e: dialog.destroy())
+
+        # Center dialog and focus
+        dialog.transient(self.root)
+        dialog.grab_set()
+        port_entry.focus_set()
+        port_entry.select_range(0, tk.END)
 
     def _show_about(self):
         """Show about dialog."""
