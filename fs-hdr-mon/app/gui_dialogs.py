@@ -136,17 +136,17 @@ class LicenseDialog:
         )
         clear_btn.pack(side=tk.LEFT, padx=8)
 
-        exit_btn = tk.Button(
+        close_btn = tk.Button(
             button_row,
-            text="EXIT",
+            text="CLOSE",
             command=self._on_close,
-            bg="#d32f2f",
+            bg="#3c3c3c",
             fg="white",
             padx=12,
             pady=6,
             width=10,
         )
-        exit_btn.pack(side=tk.RIGHT)
+        close_btn.pack(side=tk.RIGHT)
 
         self.dialog.bind("<Return>", lambda _event: self._on_verify())
         self.dialog.bind("<Escape>", lambda _event: self._on_close())
@@ -281,7 +281,7 @@ class PortSettingsDialog:
 
         save_btn = tk.Button(
             button_frame,
-            text="SAVE",
+            text="Save",
             command=self._on_save,
             bg="#4CAF50",
             fg="white",
@@ -291,17 +291,17 @@ class PortSettingsDialog:
         )
         save_btn.pack(side=tk.LEFT)
 
-        default_btn = tk.Button(
+        cancel_btn = tk.Button(
             button_frame,
-            text="USE CURRENT",
+            text="Cancel",
             command=self._on_use_current,
             bg="#3c3c3c",
             fg="white",
             padx=12,
             pady=6,
-            width=12
+            width=10
         )
-        default_btn.pack(side=tk.RIGHT)
+        cancel_btn.pack(side=tk.RIGHT)
 
         self.dialog.bind("<Return>", lambda _event: self._on_save())
         self.dialog.bind("<Escape>", lambda _event: self._on_use_current())
