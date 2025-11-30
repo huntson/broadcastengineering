@@ -15,7 +15,7 @@ fs-hdr-mon/app/config.json
 {
   "settings": {
     "host": "0.0.0.0",
-    "port": 5050,
+    "port": 5070,
     "poll_interval": 1
   },
   "fs_units": [
@@ -45,7 +45,7 @@ Application-level configuration.
   - Default: `"0.0.0.0"`
 
 - `port` (number): TCP port for the web interface
-  - Default: `5050`
+  - Default: `5070`
   - Note: You'll be prompted to confirm or change this port when the application starts
   - Access the app at: `http://<host>:<port>`
 

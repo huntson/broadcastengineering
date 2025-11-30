@@ -124,7 +124,7 @@ pyinstaller --onefile --windowed --name "FS-HDR-Monitor" fs_mon.py
 2. Create `config.json` in same folder (use config-example.json as template)
 3. Edit `config.json` with FS unit IP addresses
 4. Double-click `FS-HDR-Monitor.exe`
-5. Access: `http://localhost:5050` (or port specified at startup)
+5. Access: `http://localhost:5070` (or port specified at startup)
 
 ### Configuration Example
 ```json

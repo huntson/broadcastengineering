@@ -53,8 +53,8 @@ Pre-built Windows executable available - no Python installation required!
    ```
 
 4. **Access the web interface:**
-   - Open browser to: `http://localhost:5050` (default port)
-   - From another PC: `http://<server-ip>:5050`
+   - Open browser to: `http://localhost:5070` (default port)
+   - From another PC: `http://<server-ip>:5070`
    - Port can be configured on first run or changed in `config.json`
 
 ## Building Standalone .EXE
@@ -140,7 +140,7 @@ deployment/
 2. Create `config.json` in the same folder (use `config-example.json` as template)
 3. Edit `config.json` with your FS unit IP addresses
 4. Double-click `FS-HDR-Monitor.exe` to start (will prompt for port on first run)
-5. Open browser to `http://localhost:5050` (or the port you configured)
+5. Open browser to `http://localhost:5070` (or the port you configured)
 
 ### Running as a Windows Service (Optional)
 
@@ -164,7 +164,7 @@ See [CONFIG_README.md](CONFIG_README.md) for detailed configuration documentatio
 {
   "settings": {
     "host": "0.0.0.0",
-    "port": 5050,
+    "port": 5070,
     "poll_interval": 1
   },
   "fs_units": [
@@ -189,7 +189,7 @@ See [CONFIG_README.md](CONFIG_README.md) for detailed configuration documentatio
 - **Recall Presets**: Click preset buttons to recall saved configurations
 
 ### Compact View
-- Access at: `http://localhost:5050/compact` (or your configured port)
+- Access at: `http://localhost:5070/compact` (or your configured port)
 - Simplified bullet-point status view
 - Useful for monitoring at-a-glance
 
@@ -210,7 +210,7 @@ See [CONFIG_README.md](CONFIG_README.md) for detailed configuration documentatio
 
 ### Can't Access from Another PC
 - **Host setting**: Change `"host": "127.0.0.1"` to `"host": "0.0.0.0"` in config.json
-- **Firewall**: Allow the configured port (default 5050) through Windows Firewall
+- **Firewall**: Allow the configured port (default 5070) through Windows Firewall
 - **Network**: Ensure both PCs are on same network/VLAN
 
 ### FS Units Not Responding

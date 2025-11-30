@@ -69,9 +69,9 @@ jobs:
 
             ## Download
             - Download `FS-HDR-Monitor.exe` below
-            - Double-click to run (will prompt for port configuration on first run)
+            - Double-click to run (GUI dialogs for license and port on first run)
             - Create `config.json` in the same folder to configure FS units
-            - Access the web interface at http://localhost:5050 (default port)
+            - Access the web interface at http://localhost:5070 (default port)
 
             ## What's Included
             - Standalone Windows executable (no Python required)

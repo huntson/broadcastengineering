@@ -13,11 +13,12 @@ import threading
 import time
 import re
 import requests
+import tkinter as tk
+from pathlib import Path
 from flask import Flask, render_template_string, request, redirect, url_for, jsonify, send_file
 
-# License system
-from license.storage import load_cached_license, save_license, clear_license
-from license.verification import verify_name_key
+# GUI dialogs for license and settings
+from gui_dialogs import LicenseDialog, PortSettingsDialog
 
 app = Flask(__name__)
 
@@ -79,72 +80,7 @@ def _fs_set_param(ip: str, paramid: str, value):
         timeout=1
     ).raise_for_status()
 
-# ── License Management ────────────────────────────────────────────────────
-def check_license():
-    """Check for valid license. Prompt if needed. Exit if invalid."""
-    print("\n" + "="*60)
-    print("FS-HDR Monitor - License Verification")
-    print("="*60)
-
-    # Try to load cached license
-    cached = load_cached_license()
-    if cached:
-        name = cached["name"]
-        key = cached["key"]
-        is_valid, reason = verify_name_key(name, key)
-
-        if is_valid:
-            print(f"[license] Licensed to: {name}")
-            print("="*60)
-            return True
-        else:
-            print(f"[license] Cached license invalid: {reason}")
-            clear_license()
-
-    # No valid cached license - prompt for one
-    print("\nNo valid license found. Please enter your license details:")
-    print("(Press Ctrl+C to exit)")
-    print("-"*60)
-
-    max_attempts = 3
-    for attempt in range(1, max_attempts + 1):
-        try:
-            name = input("License Name: ").strip()
-            if not name:
-                print("[error] Name cannot be empty")
-                continue
-
-            key = input("License Key: ").strip()
-            if not key:
-                print("[error] Key cannot be empty")
-                continue
-
-            # Verify the license
-            is_valid, reason = verify_name_key(name, key)
-
-            if is_valid:
-                # Save and continue
-                save_license(name, key)
-                print(f"\n[license] License verified and saved!")
-                print(f"[license] Licensed to: {name}")
-                print("="*60)
-                return True
-            else:
-                print(f"\n[error] License verification failed: {reason}")
-                if attempt < max_attempts:
-                    print(f"[error] Attempt {attempt}/{max_attempts}. Please try again.\n")
-                else:
-                    print(f"[error] Maximum attempts reached.")
-
-        except KeyboardInterrupt:
-            print("\n\n[license] License verification cancelled by user.")
-            sys.exit(1)
-        except Exception as e:
-            print(f"\n[error] Unexpected error: {e}")
-
-    print("\n[license] No valid license provided. Exiting.")
-    print("="*60)
-    sys.exit(1)
+# Note: License checking is now done via GUI in the main block
 
 # ── Configuration Management ──────────────────────────────────────────────
 def get_default_config():
@@ -152,7 +88,7 @@ def get_default_config():
     return {
         "settings": {
             "host": "0.0.0.0",
-            "port": 5050,
+            "port": 5070,
             "poll_interval": 1
         },
         "fs_units": [],
@@ -196,43 +132,7 @@ def save_config(config):
     with open(CONFIG_FILE, "w") as fh:
         json.dump(config, fh, indent=2)
 
-def prompt_for_port():
-    """Prompt user to confirm or change the port number."""
-    global CONFIG
-    current_port = CONFIG["settings"]["port"]
-
-    print("\n" + "="*60)
-    print("FS-HDR Monitor - Port Configuration")
-    print("="*60)
-    print(f"Current port: {current_port}")
-    print("\nPress ENTER to use current port, or type a new port number (1-65535):")
-    print("="*60)
-
-    try:
-        user_input = input("> ").strip()
-
-        # If empty, keep current port
-        if not user_input:
-            print(f"[init] Using port {current_port}")
-            return
-
-        # Validate and set new port
-        new_port = int(user_input)
-        if not (1 <= new_port <= 65535):
-            print(f"[warn] Invalid port number. Using default {current_port}")
-            return
-
-        # Update config and save
-        CONFIG["settings"]["port"] = new_port
-        save_config(CONFIG)
-        print(f"[init] Port changed to {new_port} and saved to config.json")
-
-    except ValueError:
-        print(f"[warn] Invalid input. Using current port {current_port}")
-    except KeyboardInterrupt:
-        print(f"\n[init] Interrupted. Using port {current_port}")
-    except Exception as e:
-        print(f"[warn] Error during port configuration: {e}. Using port {current_port}")
+# Note: Port configuration is now done via GUI in the main block
 
 # Load configuration at startup
 CONFIG, IS_FIRST_RUN = load_config()
@@ -1355,12 +1255,20 @@ load();
 """
 
 if __name__ == "__main__":
-    # Check license first - exit if invalid
-    check_license()
+    # Initialize Tkinter root (hidden)
+    root = tk.Tk()
+    root.withdraw()  # Hide the main window
 
-    # Prompt user for port configuration only on first run
+    # Check license with GUI dialog - exit if invalid
+    license_dialog = LicenseDialog(root, Path(CONFIG_FILE))
+    license_dialog.check_and_show()
+
+    # Prompt for port configuration on first run with GUI dialog
     if IS_FIRST_RUN:
-        prompt_for_port()
+        port_dialog = PortSettingsDialog(root, Path(CONFIG_FILE))
+        new_port = port_dialog.prompt_for_port(CONFIG["settings"]["port"])
+        if new_port and new_port != CONFIG["settings"]["port"]:
+            CONFIG["settings"]["port"] = new_port
 
     # Start background polling thread
     threading.Thread(target=poll_loop, daemon=True).start()
@@ -1371,4 +1279,11 @@ if __name__ == "__main__":
     print(f"\n[init] Starting FS-HDR Monitor on {host}:{port}", flush=True)
     print(f"[init] Open your browser to: http://localhost:{port}", flush=True)
     print("="*60 + "\n", flush=True)
-    app.run(host=host, port=port)
+
+    # Run Flask in a separate thread so Tkinter can handle dialogs
+    flask_thread = threading.Thread(target=lambda: app.run(host=host, port=port, use_reloader=False), daemon=True)
+    flask_thread.start()
+
+    # Keep the main thread alive for potential future GUI interactions
+    # (Flask runs in background thread)
+    flask_thread.join()

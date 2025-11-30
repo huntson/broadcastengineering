@@ -17,7 +17,7 @@
    - Wait for console message: "Starting FS-HDR Monitor on 0.0.0.0:5000"
 
 4. **Access dashboard:**
-   - Open browser to: `http://localhost:5050` (default port, configurable at startup)
+   - Open browser to: `http://localhost:5070` (default port, configurable at startup)
 
 ### Configuration Tips
 
@@ -104,7 +104,7 @@ cd app
 python fs_mon.py
 ```
 
-Open browser to: `http://localhost:5050` (default port)
+Open browser to: `http://localhost:5070` (default port)
 
 ---
 
