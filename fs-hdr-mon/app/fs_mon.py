@@ -19,8 +19,8 @@ import argparse
 from pathlib import Path
 from flask import Flask, render_template_string, request, redirect, url_for, jsonify, send_file
 
-# GUI dialogs for license and settings
-from gui_dialogs import LicenseDialog, PortSettingsDialog
+# GUI dialogs for settings
+from gui_dialogs import PortSettingsDialog
 
 app = Flask(__name__)
 
