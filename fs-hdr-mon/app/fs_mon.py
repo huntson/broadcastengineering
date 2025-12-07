@@ -1384,8 +1384,9 @@ if __name__ == '__main__':
             print("ERROR: Valid license required to run FS-HDR Monitor")
             print("="*60)
             print("\nPlease contact your administrator for a license key.")
-            print("\nPress Enter to exit...")
-            input()
+            if args.console:
+                print("\nPress Enter to exit...")
+                input()
             exit(1)
 
         print("\n" + "="*60)
