@@ -12,7 +12,7 @@ from typing import Tuple
 from nacl.exceptions import BadSignatureError
 from nacl.signing import VerifyKey
 
-DEFAULT_PRODUCT = "fs-hdr-monitor"
+DEFAULT_PRODUCT = "fs-hdr-mon-desktop"
 
 
 def _b64u_decode(value: str) -> bytes:
