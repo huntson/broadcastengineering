@@ -1,1 +1,10 @@
-"""License verification system for FS-HDR Monitor."""
+"""Licensing utilities for the FS-HDR Monitor application."""
+
+from .dialog import LicenseManager, LicenseStatus
+from . import storage
+
+__all__ = [
+    "LicenseManager",
+    "LicenseStatus",
+    "storage",
+]

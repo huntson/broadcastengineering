@@ -9,11 +9,13 @@ Monitor and control AJA FS framestore units
 import os
 import sys
 import json
+import copy
 import threading
 import time
 import re
 import requests
 import tkinter as tk
+import argparse
 from pathlib import Path
 from flask import Flask, render_template_string, request, redirect, url_for, jsonify, send_file
 
@@ -32,7 +34,16 @@ FORMAT_MAP = {
 print(f"[init] FORMAT_MAP size={len(FORMAT_MAP)}", flush=True)
 
 # Configuration file - single JSON file for all settings
-CONFIG_FILE = os.path.join(os.path.dirname(__file__), "config.json")
+def _get_config_path():
+    """Get config file path - next to exe in production, in app/ during development."""
+    if getattr(sys, 'frozen', False):
+        # Running as PyInstaller bundle (.exe) - store next to exe
+        return os.path.join(os.path.dirname(sys.executable), "config.json")
+    else:
+        # Running as Python script (development) - store in app/ directory
+        return os.path.join(os.path.dirname(__file__), "config.json")
+
+CONFIG_FILE = _get_config_path()
 
 prev_error_counts = {}      # (ip, channel) → last error total
 
@@ -129,8 +140,9 @@ def load_config():
 
 def save_config(config):
     """Save entire configuration to config.json."""
-    with open(CONFIG_FILE, "w") as fh:
-        json.dump(config, fh, indent=2)
+    with config_lock:
+        with open(CONFIG_FILE, "w") as fh:
+            json.dump(config, fh, indent=2)
 
 # Note: Port configuration is now done via GUI in the main block
 
@@ -141,23 +153,30 @@ POLL_INTERVAL = CONFIG["settings"]["poll_interval"]
 # ── Helper functions for backward compatibility ────────────────────────────
 def load_units():
     """Return list of FS units from config."""
-    return CONFIG.get("fs_units", [])
+    with config_lock:
+        return list(CONFIG.get("fs_units", []))  # Return a copy to avoid external mutations
 
 def save_units(lst):
     """Update FS units in config and save."""
-    CONFIG["fs_units"] = lst
+    with config_lock:
+        CONFIG["fs_units"] = lst
     save_config(CONFIG)
 
 def load_presets():
     """Return presets structure from config."""
-    return {"presets": CONFIG.get("presets", {})}
+    with config_lock:
+        # Return a deep copy to avoid external mutations
+        return {"presets": copy.deepcopy(CONFIG.get("presets", {}))}
 
 def save_presets(presets_data):
     """Update presets in config and save."""
-    CONFIG["presets"] = presets_data.get("presets", {})
+    with config_lock:
+        CONFIG["presets"] = presets_data.get("presets", {})
     save_config(CONFIG)
 
 fs_units = {}
+fs_units_lock = threading.Lock()
+config_lock = threading.Lock()
 
 # ── polling FS-HDR ─────────────────────────────────────────────────────────
 def poll_unit(ip, model="FS4/HDR"):
@@ -216,16 +235,19 @@ def poll_unit(ip, model="FS4/HDR"):
 def poll_loop():
     while True:
         for u in load_units():
-            fs_units[u["ip"]] = poll_unit(u["ip"], u.get("model", "FS4/HDR"))
+            result = poll_unit(u["ip"], u.get("model", "FS4/HDR"))
+            with fs_units_lock:
+                fs_units[u["ip"]] = result
         time.sleep(POLL_INTERVAL)
 
 # ── Flask routes ───────────────────────────────────────────────────────────
 @app.route("/")
 def index():
-    units = [
-        fs_units.get(u["ip"], {"ip": u["ip"], "error": True, "data": {}})
-        for u in load_units()
-    ]
+    with fs_units_lock:
+        units = [
+            fs_units.get(u["ip"], {"ip": u["ip"], "error": True, "data": {}})
+            for u in load_units()
+        ]
     model_map = {u["ip"]: u.get("model", "FS4/HDR") for u in load_units()}
     return render_template_string(
         MAIN_TEMPLATE,
@@ -258,58 +280,108 @@ def remove(ip):
     lst2 = [u for u in lst if u["ip"] != ip]
     if len(lst2) != len(lst):
         save_units(lst2)
-        fs_units.pop(ip, None)
+        with fs_units_lock:
+            fs_units.pop(ip, None)
     return redirect(url_for("index"))
 
 @app.route("/export")
 def export():
     # Create a combined export file with both units and presets
-    open(DATA_FILE, "a").close()
-    
     export_data = {
         "units": load_units(),
         "presets": load_presets()
     }
-    
-    export_file = os.path.join(os.path.dirname(__file__), "export.json")
+
+    # Store export file in same directory as config file
+    export_file = os.path.join(os.path.dirname(CONFIG_FILE), "export.json")
     with open(export_file, "w") as fh:
         json.dump(export_data, fh, indent=2)
-    
+
     return send_file(export_file, as_attachment=True, download_name="fs_dashboard_export.json")
 
 @app.route("/import", methods=["POST"])
 def import_file():
+    # Maximum file size: 10MB
+    MAX_FILE_SIZE = 10 * 1024 * 1024
+
     f = request.files.get("file")
-    if f and f.filename.endswith(".json"):
-        import_file_path = os.path.join(os.path.dirname(__file__), "import_temp.json")
-        f.save(import_file_path)
-        
-        try:
-            with open(import_file_path, 'r') as fh:
-                import_data = json.load(fh)
-            
-            # Check if it's the new format with both units and presets
-            if isinstance(import_data, dict) and "units" in import_data:
-                if "units" in import_data:
-                    save_units(import_data["units"])
-                if "presets" in import_data:
-                    save_presets(import_data["presets"])
-            else:
-                # Legacy format - just units
-                save_units(import_data)
-                
+    if not f:
+        return "No file uploaded", 400
+
+    # Validate file extension
+    if not f.filename.endswith(".json"):
+        return "Only .json files are allowed", 400
+
+    # Validate content type
+    if f.content_type and not f.content_type.startswith("application/json"):
+        # Allow text/plain and empty content-type as some browsers send these for .json files
+        if f.content_type not in ("text/plain", "application/octet-stream"):
+            return "Invalid file type", 400
+
+    # Store import temp file in same directory as config file
+    import_file_path = os.path.join(os.path.dirname(CONFIG_FILE), "import_temp.json")
+
+    try:
+        # Read file with size limit
+        file_content = f.read(MAX_FILE_SIZE + 1)
+        if len(file_content) > MAX_FILE_SIZE:
+            return "File too large (max 10MB)", 400
+
+        # Write to temporary file
+        with open(import_file_path, 'wb') as fh:
+            fh.write(file_content)
+
+        # Parse and validate JSON
+        with open(import_file_path, 'r') as fh:
+            import_data = json.load(fh)
+
+        # Validate JSON structure
+        if isinstance(import_data, dict):
+            # New format with both units and presets
+            if "units" in import_data:
+                if not isinstance(import_data["units"], list):
+                    raise ValueError("'units' must be a list")
+                save_units(import_data["units"])
+            if "presets" in import_data:
+                if not isinstance(import_data["presets"], dict):
+                    raise ValueError("'presets' must be a dictionary")
+                save_presets(import_data["presets"])
+        elif isinstance(import_data, list):
+            # Legacy format - just units list
+            save_units(import_data)
+        else:
+            raise ValueError("Invalid import format: expected object or array")
+
+        # Clean up temporary file
+        os.remove(import_file_path)
+
+        return redirect(url_for("index"))
+
+    except json.JSONDecodeError as e:
+        # Clean up on error
+        if os.path.exists(import_file_path):
             os.remove(import_file_path)
-        except Exception as e:
-            print(f"Error importing file: {e}")
-            
-    return redirect(url_for("index"))
+        return f"Invalid JSON file: {str(e)}", 400
+    except ValueError as e:
+        # Clean up on error
+        if os.path.exists(import_file_path):
+            os.remove(import_file_path)
+        return f"Invalid data format: {str(e)}", 400
+    except Exception as e:
+        # Clean up on error
+        if os.path.exists(import_file_path):
+            os.remove(import_file_path)
+        print(f"Error importing file: {e}")
+        return f"Error importing file: {str(e)}", 500
 
 @app.route("/data")
 def data():
-    return jsonify([
-        fs_units.get(u["ip"], {"ip": u["ip"], "error": True, "data": {}})
-        for u in load_units()
-    ])
+    with fs_units_lock:
+        units_data = [
+            fs_units.get(u["ip"], {"ip": u["ip"], "error": True, "data": {}})
+            for u in load_units()
+        ]
+    return jsonify(units_data)
 
 
 def _ensure_channel(ch):
@@ -1254,25 +1326,81 @@ load();
 </body></html>
 """
 
-if __name__ == "__main__":
-    # Initialize Tkinter root (hidden) for startup dialogs
-    startup_root = tk.Tk()
-    startup_root.withdraw()  # Hide the startup window
+def check_license():
+    """Show license dialog and verify before starting Flask."""
+    root = tk.Tk()
+    root.withdraw()  # Hide main window
+    root.update()  # Process pending events
 
-    # Check license with GUI dialog - exit if invalid
-    from gui_dialogs import LicenseDialog, PortSettingsDialog
-    license_dialog = LicenseDialog(startup_root, Path(CONFIG_FILE))
-    license_dialog.check_and_show()
+    license_valid = False
+
+    def on_status_change(status):
+        nonlocal license_valid
+        license_valid = status.ok
+        if status.ok:
+            root.quit()  # Exit Tkinter loop when valid
+
+    from license import LicenseManager, LicenseStatus
+    manager = LicenseManager(
+        root,
+        on_status_change=on_status_change
+    )
+
+    manager.ensure_dialog()  # Show dialog if not licensed
+
+    if not license_valid:
+        root.deiconify()  # Make sure root is visible for the dialog
+        root.lift()  # Bring to front
+        root.mainloop()  # Block until license validated
+
+    # Check if window still exists before destroying
+    try:
+        if root.winfo_exists():
+            root.destroy()
+    except:
+        pass  # Window already destroyed
+
+    return license_valid
+
+if __name__ == '__main__':
+    # Parse command-line arguments
+    parser = argparse.ArgumentParser(description='FS-HDR Monitor')
+    parser.add_argument('-f', '--force', action='store_true',
+                        help='Force run without license (testing only)')
+    parser.add_argument('--console', action='store_true',
+                        help='Run in console mode without GUI')
+    args = parser.parse_args()
+
+    # License check
+    if args.force:
+        print("\n" + "="*60)
+        print("⚠️  RUNNING UNLICENSED (Testing Mode)")
+        print("="*60)
+    else:
+        # Check license before starting server
+        if not check_license():
+            print("\n" + "="*60)
+            print("ERROR: Valid license required to run FS-HDR Monitor")
+            print("="*60)
+            print("\nPlease contact your administrator for a license key.")
+            print("\nPress Enter to exit...")
+            input()
+            exit(1)
+
+        print("\n" + "="*60)
+        print("✓ License validated")
+        print("="*60)
 
     # Prompt for port configuration on first run with GUI dialog
-    if IS_FIRST_RUN:
+    if IS_FIRST_RUN and not args.console:
+        from gui_dialogs import PortSettingsDialog
+        startup_root = tk.Tk()
+        startup_root.withdraw()
         port_dialog = PortSettingsDialog(startup_root, Path(CONFIG_FILE))
         new_port = port_dialog.prompt_for_port(CONFIG["settings"]["port"])
         if new_port and new_port != CONFIG["settings"]["port"]:
             CONFIG["settings"]["port"] = new_port
-
-    # Clean up startup root
-    startup_root.destroy()
+        startup_root.destroy()
 
     # Start background polling thread
     threading.Thread(target=poll_loop, daemon=True).start()
@@ -1281,25 +1409,28 @@ if __name__ == "__main__":
     host = CONFIG["settings"]["host"]
     port = CONFIG["settings"]["port"]
 
-    # Create GUI window
-    from gui import FSHDRMonitorGUI
+    # Start server based on mode
+    if args.console:
+        # Console mode - original behavior
+        print(f"\nStarting FS-HDR Monitor on http://{host}:{port}\n")
+        app.run(debug=False, host=host, port=port)
+    else:
+        # GUI mode - run Flask in background thread
+        print(f"Starting FS-HDR Monitor on http://{host}:{port}")
 
-    def quit_callback():
-        """Called when GUI is closed."""
-        sys.exit(0)
+        def run_flask():
+            app.run(debug=False, host=host, port=port, use_reloader=False)
 
-    gui = FSHDRMonitorGUI(host, port, Path(CONFIG_FILE), on_quit_callback=quit_callback)
+        # Start Flask in daemon thread
+        flask_thread = threading.Thread(target=run_flask, daemon=True)
+        flask_thread.start()
 
-    # Start Flask in a background thread
-    print(f"\n[init] Starting FS-HDR Monitor on {host}:{port}", flush=True)
-    print(f"[init] Open your browser to: http://localhost:{port}", flush=True)
-    print("="*60 + "\n", flush=True)
+        # Create and run GUI
+        from gui import FSHDRMonitorGUI
 
-    flask_thread = threading.Thread(
-        target=lambda: app.run(host=host, port=port, use_reloader=False, debug=False),
-        daemon=True
-    )
-    flask_thread.start()
+        def quit_callback():
+            """Called when GUI is closed."""
+            sys.exit(0)
 
-    # Run GUI main loop (blocks until window closed)
-    gui.run()
+        gui = FSHDRMonitorGUI(host, port, Path(CONFIG_FILE), on_quit_callback=quit_callback)
+        gui.run()

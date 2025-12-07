@@ -1,4 +1,4 @@
-"""Persistence helpers for license state."""
+"""Persistence helpers for license state and simple app settings."""
 
 from __future__ import annotations
 
@@ -8,19 +8,16 @@ import os
 from pathlib import Path
 from typing import Dict, Optional
 
+# Store license next to the executable
+if getattr(sys, 'frozen', False):
+    # Running as compiled executable
+    DEFAULT_DIR = Path(sys.executable).parent
+else:
+    # Running as script
+    DEFAULT_DIR = Path(__file__).parent.parent
 
-def _get_app_dir() -> Path:
-    """Get the directory where the app is running from (portable mode)."""
-    if getattr(sys, 'frozen', False):
-        # Running as PyInstaller bundle (.exe)
-        return Path(sys.executable).parent
-    else:
-        # Running as Python script (development mode)
-        return Path(__file__).resolve().parent.parent
-
-
-DEFAULT_DIR = _get_app_dir()
 DEFAULT_PATH = DEFAULT_DIR / "license.json"
+SETTINGS_PATH = DEFAULT_DIR / "settings.json"
 
 
 def _resolve_path(path: Optional[Path]) -> Path:
@@ -58,3 +55,25 @@ def clear_license(path: Optional[Path] = None) -> None:
         target.unlink()
     except FileNotFoundError:
         return
+
+
+def load_settings(path: Optional[Path] = None) -> Dict[str, str]:
+    target = path if path is not None else SETTINGS_PATH
+    try:
+        with target.open("r", encoding="utf-8") as handle:
+            payload = json.load(handle)
+            if isinstance(payload, dict):
+                return {str(k): str(v) for k, v in payload.items()}
+    except FileNotFoundError:
+        pass
+    except (OSError, json.JSONDecodeError):
+        pass
+    return {}
+
+
+def save_settings(settings: Dict[str, str], path: Optional[Path] = None) -> Path:
+    target = path if path is not None else SETTINGS_PATH
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with target.open("w", encoding="utf-8") as handle:
+        json.dump(settings, handle)
+    return target

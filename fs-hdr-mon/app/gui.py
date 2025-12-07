@@ -7,13 +7,8 @@ import sys
 import webbrowser
 from pathlib import Path
 
-from gui_dialogs import LicenseDialog, PortSettingsDialog
-
-try:
-    from version import __version__, __build__
-except ImportError:
-    __version__ = "dev"
-    __build__ = "local"
+from gui_dialogs import PortSettingsDialog
+from license import LicenseManager
 
 
 class LogRedirector:
@@ -63,6 +58,7 @@ class FSHDRMonitorGUI:
         self.port = port
         self.config_file = config_file
         self.on_quit_callback = on_quit_callback
+        self.license_manager = None
 
         # Save original stdout/stderr
         self.original_stdout = sys.stdout
@@ -73,6 +69,14 @@ class FSHDRMonitorGUI:
         self.root.title("FS-HDR Monitor")
         self.root.geometry("800x600")
         self.root.configure(bg="#1e1e1e")
+
+        # Set icon if available
+        icon_path = Path(__file__).parent.parent / "icon.ico"
+        if icon_path.exists():
+            try:
+                self.root.iconbitmap(str(icon_path))
+            except:
+                pass
 
         # Create menu bar
         self._create_menu()
@@ -197,13 +201,9 @@ class FSHDRMonitorGUI:
 
     def _show_license_dialog(self):
         """Show license management dialog."""
-        # Create a temporary hidden root for the dialog
-        temp_root = tk.Toplevel(self.root)
-        temp_root.withdraw()
-
-        license_dialog = LicenseDialog(temp_root, self.config_file)
-        license_dialog.is_valid = True  # Don't block since we're already running
-        license_dialog.show_dialog()
+        if not self.license_manager:
+            self.license_manager = LicenseManager(self.root)
+        self.license_manager.show_dialog()
 
     def _show_settings_dialog(self):
         """Show settings dialog for port configuration."""
@@ -228,9 +228,14 @@ class FSHDRMonitorGUI:
 
     def _show_about(self):
         """Show about dialog."""
+        # Read version from VERSION file
+        version = "1.0.0"
+        version_file = Path(__file__).parent.parent / 'VERSION'
+        if version_file.exists():
+            version = version_file.read_text().strip()
+
         about_text = f"""FS-HDR Monitor
-Version {__version__}
-Build {__build__}
+Version {version}
 
 Web-based monitoring and control dashboard for AJA FS-HDR, FS4, and FS2 framestore units.
 
