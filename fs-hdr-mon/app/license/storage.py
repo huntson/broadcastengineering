@@ -16,8 +16,8 @@ else:
     # Running as script
     DEFAULT_DIR = Path(__file__).parent.parent
 
-DEFAULT_PATH = DEFAULT_DIR / "license.json"
-SETTINGS_PATH = DEFAULT_DIR / "settings.json"
+DEFAULT_PATH = DEFAULT_DIR / "fs-hdr-monitor-license.json"
+SETTINGS_PATH = DEFAULT_DIR / "fs-hdr-monitor-settings.json"
 
 
 def _resolve_path(path: Optional[Path]) -> Path:
