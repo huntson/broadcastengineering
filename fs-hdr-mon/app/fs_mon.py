@@ -146,6 +146,11 @@ def save_config(config):
 
 # Note: Port configuration is now done via GUI in the main block
 
+# Initialize locks before using them
+fs_units = {}
+fs_units_lock = threading.Lock()
+config_lock = threading.Lock()
+
 # Load configuration at startup
 CONFIG, IS_FIRST_RUN = load_config()
 POLL_INTERVAL = CONFIG["settings"]["poll_interval"]
@@ -173,10 +178,6 @@ def save_presets(presets_data):
     with config_lock:
         CONFIG["presets"] = presets_data.get("presets", {})
     save_config(CONFIG)
-
-fs_units = {}
-fs_units_lock = threading.Lock()
-config_lock = threading.Lock()
 
 # ── polling FS-HDR ─────────────────────────────────────────────────────────
 def poll_unit(ip, model="FS4/HDR"):
