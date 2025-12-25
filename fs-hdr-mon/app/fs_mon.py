@@ -51,7 +51,7 @@ PARAMS = {"name": "eParamID_SystemName", "temp": "eParamID_Temperature"}
 for i in range(1, 5):
     PARAMS[f"sdi{i}"] = f"eParamID_Vid{i}DetectedInputFormat"
     PARAMS[f"vid{i}"] = f"eParamID_Vid{i}OutputFormat"
-    PARAMS[f"tpg{i}"] = f"eParamID_Vid{i}TestPatternVideo"
+    PARAMS[f"tpg{i}"] = f"eParamID_Vid{i}VideoOutputMode"
 
 
 def _coerce_int(val):
@@ -63,7 +63,7 @@ def _coerce_int(val):
 
 
 def _fs_audio_param(ch: int) -> str:
-    return f"eParamID_Audio{ch}SamplesDelay"
+    return f"eParamID_AudioDelayGlobal_SDI{ch}"
 
 
 def _fs_frame_param(ch: int) -> str:
@@ -226,8 +226,8 @@ def poll_unit(ip, model="FS4/HDR"):
             # ---------- TEST PATTERN (TPG-x) channels ----------
             elif key.startswith("tpg"):
                 val = js.get("value")
-                # Test pattern is enabled if value is anything other than 8 (Black/Off)
-                out["data"][key] = (val != "8" and val != 8)
+                # Test pattern is enabled if value is 4 (Test Pattern mode)
+                out["data"][key] = (val == "4" or val == 4)
 
             # ---------- everything else ----------
             else:
@@ -486,8 +486,8 @@ def toggle_testpattern():
             timeout=1
         ).json().get("value")
 
-        # Toggle: if it's 8 (off/black), turn on to 1 (SDR Bars 75%), else turn off to 8
-        new_val = "1" if (current_val == "8" or current_val == 8) else "8"
+        # Toggle: if it's 0 (input video), turn on to 4 (test pattern), else turn off to 0
+        new_val = "4" if (current_val == "0" or current_val == 0) else "0"
 
         requests.get(
             f"http://{ip}/config",
@@ -495,7 +495,7 @@ def toggle_testpattern():
             timeout=1
         ).raise_for_status()
 
-        return jsonify(success=True, enabled=(new_val == "1"))
+        return jsonify(success=True, enabled=(new_val == "4"))
     except Exception as e:
         return jsonify(success=False, error=str(e)), 500
 
@@ -902,11 +902,71 @@ Object.entries(channelControls).forEach(([key, ctrl]) => {
     updateControlValue(key);
     scheduleChannelUpdate();
   });
+  // Add double-click editing for value displays
+  ctrl.valueEl.addEventListener('dblclick', () => {
+    enableValueEditing(key);
+  });
+  ctrl.valueEl.style.cursor = 'pointer';
 });
 
 function updateControlValue(key) {
   const ctrl = channelControls[key];
   ctrl.valueEl.textContent = ctrl.slider.value;
+}
+
+function enableValueEditing(key) {
+  const ctrl = channelControls[key];
+  const currentValue = ctrl.slider.value;
+
+  // Create input element
+  const input = document.createElement('input');
+  input.type = 'number';
+  input.value = currentValue;
+  input.style.width = '100px';
+  input.style.fontSize = '14px';
+
+  // Replace the value display with the input
+  const parent = ctrl.valueEl.parentNode;
+  parent.replaceChild(input, ctrl.valueEl);
+  input.focus();
+  input.select();
+
+  let restored = false;
+
+  function restoreDisplay() {
+    if (restored) return;
+    restored = true;
+    if (input.parentNode === parent) {
+      parent.replaceChild(ctrl.valueEl, input);
+    }
+  }
+
+  function applyValue() {
+    const newValue = parseInt(input.value, 10);
+    if (!isNaN(newValue)) {
+      const min = Number(ctrl.slider.min);
+      const max = Number(ctrl.slider.max);
+      const clampedValue = Math.max(min, Math.min(max, newValue));
+      ctrl.slider.value = clampedValue;
+      updateControlValue(key);
+      scheduleChannelUpdate();
+    }
+    restoreDisplay();
+  }
+
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      applyValue();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      restoreDisplay();
+    }
+  });
+
+  input.addEventListener('blur', () => {
+    applyValue();
+  });
 }
 
 function setControlData(key, data) {
