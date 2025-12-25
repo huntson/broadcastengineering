@@ -51,6 +51,7 @@ PARAMS = {"name": "eParamID_SystemName", "temp": "eParamID_Temperature"}
 for i in range(1, 5):
     PARAMS[f"sdi{i}"] = f"eParamID_Vid{i}DetectedInputFormat"
     PARAMS[f"vid{i}"] = f"eParamID_Vid{i}OutputFormat"
+    PARAMS[f"tpg{i}"] = f"eParamID_Vid{i}TestPatternVideo"
 
 
 def _coerce_int(val):
@@ -184,7 +185,7 @@ def poll_unit(ip, model="FS4/HDR"):
     out = {"ip": ip, "error": False, "data": {}}
     max_ch = 2 if model == "FS2" else 4      # ← NEW
     for key, pid in PARAMS.items():
-        if (m := re.match(r"(sdi|vid)(\d+)", key)) and int(m.group(2)) > max_ch:
+        if (m := re.match(r"(sdi|vid|tpg)(\d+)", key)) and int(m.group(2)) > max_ch:
             continue
         actual_pid = pid + "_5923" if key.startswith("vid") else pid
         try:
@@ -222,6 +223,12 @@ def poll_unit(ip, model="FS4/HDR"):
                     str(code_int)
                 )
 
+            # ---------- TEST PATTERN (TPG-x) channels ----------
+            elif key.startswith("tpg"):
+                val = js.get("value")
+                # Test pattern is enabled if value is anything other than 8 (Black/Off)
+                out["data"][key] = (val != "8" and val != 8)
+
             # ---------- everything else ----------
             else:
                 out["data"][key] = js.get("value_name", js.get("value", "ERR"))
@@ -256,6 +263,16 @@ def index():
         formats=list(FORMAT_MAP.keys()),
         model_map=json.dumps(model_map)
     )
+
+@app.route("/api/units")
+def api_units():
+    """Return current units data as JSON for client-side use."""
+    with fs_units_lock:
+        units = [
+            fs_units.get(u["ip"], {"ip": u["ip"], "error": True, "data": {}})
+            for u in load_units()
+        ]
+    return jsonify(units)
 
 @app.route("/compact")
 def compact():
@@ -452,6 +469,35 @@ def set_format():
     except Exception as e:
         return jsonify(success=False, error=str(e)), 500
     return jsonify(success=True)
+
+@app.route("/toggle_testpattern", methods=["POST"])
+def toggle_testpattern():
+    d = request.get_json(force=True) or {}
+    ip, ch = d.get("ip"), d.get("ch")
+    if not ip or not ch:
+        return jsonify(success=False), 400
+
+    # Get current test pattern state
+    pid = PARAMS[f"tpg{ch}"]
+    try:
+        current_val = requests.get(
+            f"http://{ip}/config",
+            params={"action": "get", "paramid": pid},
+            timeout=1
+        ).json().get("value")
+
+        # Toggle: if it's 8 (off/black), turn on to 1 (SDR Bars 75%), else turn off to 8
+        new_val = "1" if (current_val == "8" or current_val == 8) else "8"
+
+        requests.get(
+            f"http://{ip}/config",
+            params={"action": "set", "paramid": pid, "value": new_val},
+            timeout=1
+        ).raise_for_status()
+
+        return jsonify(success=True, enabled=(new_val == "1"))
+    except Exception as e:
+        return jsonify(success=False, error=str(e)), 500
 
 @app.route("/presets")
 def get_presets():
@@ -714,6 +760,18 @@ MAIN_TEMPLATE = """
   background: #218838;
 }
 
+.context-menu-item {
+  padding: 8px 16px;
+  cursor: pointer;
+  color: var(--fg);
+  font-size: 0.9em;
+  user-select: none;
+}
+
+.context-menu-item:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
 </style></head><body>
 <h1>Pegasus Frame Sync Dashboard</h1>
 
@@ -797,6 +855,14 @@ MAIN_TEMPLATE = """
   </div>
 </div>
 
+<!-- Channel Context Menu -->
+<div id="channel-context-menu" style="display: none; position: absolute; background: var(--tile); border: 2px solid var(--border); border-radius: 4px; padding: 4px 0; min-width: 180px; z-index: 1000; box-shadow: 0 4px 8px rgba(0,0,0,0.3);">
+  <div class="context-menu-item" onclick="contextMenuAction('delays')">Channel Delays...</div>
+  <div class="context-menu-item" id="context-testpattern-item" onclick="contextMenuAction('testpattern')">
+    <span id="context-testpattern-check" style="visibility: hidden; margin-right: 4px;">✓</span>Test Pattern
+  </div>
+</div>
+
 <script>
 const FORMAT_LIST = {{ formats|tojson }};
 const MODEL_MAP   = {{ model_map|safe }};
@@ -808,6 +874,8 @@ let editingPresetNumber = null;
 let channelDialogTarget = null;
 let channelDialogSnapshot = null;
 const channelUpdateState = { timer: null, inflight: false, pending: false };
+let contextMenuTarget = null;
+let currentUnitsData = [];
 
 const channelControls = {
   audio: {
@@ -920,6 +988,67 @@ function closeChannelDialog() {
   resetChannelUpdateState();
   setChannelDialogError('');
   populateChannelDialog(null, null);
+}
+
+function showChannelContextMenu(e, ip, ch, label) {
+  e.preventDefault();
+  const menu = document.getElementById('channel-context-menu');
+  contextMenuTarget = { ip, ch, label };
+
+  // Position the menu at cursor
+  menu.style.left = e.pageX + 'px';
+  menu.style.top = e.pageY + 'px';
+  menu.style.display = 'block';
+
+  // Update test pattern checkmark based on current state
+  updateTestPatternCheckmark();
+}
+
+function hideChannelContextMenu() {
+  document.getElementById('channel-context-menu').style.display = 'none';
+  contextMenuTarget = null;
+}
+
+function updateTestPatternCheckmark() {
+  if (!contextMenuTarget) return;
+
+  const { ip, ch } = contextMenuTarget;
+  let tpgEnabled = false;
+
+  // Find the unit data from current loaded data
+  const unit = currentUnitsData.find(u => u.ip === ip);
+  if (unit && unit.data) {
+    tpgEnabled = unit.data['tpg' + ch] || false;
+  }
+
+  const checkmark = document.getElementById('context-testpattern-check');
+  checkmark.style.visibility = tpgEnabled ? 'visible' : 'hidden';
+}
+
+function contextMenuAction(action) {
+  if (!contextMenuTarget) return;
+
+  const { ip, ch, label } = contextMenuTarget;
+
+  if (action === 'delays') {
+    hideChannelContextMenu();
+    openChannelDialog(ip, ch, label);
+  } else if (action === 'testpattern') {
+    // Toggle test pattern
+    fetch('/toggle_testpattern', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ip, ch })
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (data.success) {
+          // Update will happen on next poll
+          setTimeout(loadData, 100);
+        }
+      });
+    hideChannelContextMenu();
+  }
 }
 
 function scheduleChannelUpdate() {
@@ -1149,6 +1278,7 @@ function loadData(){
 
   /* FS-HDR units */
   fetch('/data').then(r=>r.json()).then(units=>{
+    currentUnitsData = units;  // Store for context menu
     const container=document.getElementById('units-container');
     container.querySelectorAll('.unit').forEach(e=>e.remove());
     units.forEach(u=>{
@@ -1183,8 +1313,7 @@ hdr.innerHTML = `
             t.classList.add('good');        // green when SDI = OUT
         }
         t.addEventListener('contextmenu', e => {
-          e.preventDefault();
-          openChannelDialog(u.ip, i, labels[i-1]);
+          showChannelContextMenu(e, u.ip, i, labels[i-1]);
         });
         const key=`${u.ip}_${i}`, display=pending[key]||vid;
         const dd=document.createElement('div');dd.className='custom-dropdown';
@@ -1270,6 +1399,10 @@ loadPresetNames();
    if (!e.target.closest('.custom-dropdown')) {
      document.querySelectorAll('.dropdown-menu')
              .forEach(m => m.style.display = 'none');
+   }
+   // Close context menu when clicking outside
+   if (!e.target.closest('#channel-context-menu')) {
+     hideChannelContextMenu();
    }
  });
 </script>
