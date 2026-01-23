@@ -150,13 +150,16 @@ class SimpleKFrameClient:
             elif '<Heartbeat>' in xml_text:
                 # Handle heartbeat response like C implementation
                 self.last_heartbeat_response = time.time()
-                self.response_timer = 0.0  # Clear response timer
-                print("Heartbeat response received (response timer cleared)")
+                print("Heartbeat response received")
             elif '<Authentication>' in xml_text:
                 # Handle authentication response
-                self.response_timer = 0.0  # Clear response timer
-                print("Authentication response received (response timer cleared)")
+                print("Authentication response received")
                 self._send_initial_requests()
+
+            # Match C implementation: Clear response timer on ANY valid message (RXR_ANYMSG behavior)
+            # The C code disables the response timer whenever ANY ETP data is received, not just heartbeats
+            # This is critical - if we're receiving data, the connection is alive
+            self.response_timer = 0.0
         except Exception as e:
             print(f"Parse error: {e}")
     def process_vpe_input_simple(self, xml_text: str):
@@ -538,6 +541,24 @@ class SimpleKFrameClient:
         if hasattr(self, 'gui') and self.gui:
             self.gui.root.after_idle(self.gui.update_display)
         self._notify_update_callbacks()
+
+    def reset_port(self):
+        """Reset all tally data structures - matches kframe_reset_port() in C implementation"""
+        with self.lock:
+            self.current_on_air = defaultdict(dict)
+            self.source_names = {}
+            self.on_air_layers = defaultdict(lambda: defaultdict(list))
+            self.layer_sources = defaultdict(lambda: defaultdict(dict))
+            self.aux_assignments = defaultdict(lambda: OrderedDict())
+            self.all_outputs = defaultdict(lambda: OrderedDict())
+            self.engineering_sources = OrderedDict()
+            self.logical_sources = defaultdict(lambda: OrderedDict())
+            self.engineering_sources_ready = False
+            self.logical_suites_ready = set()
+            self.data_complete = False
+            self.heartbeat_interval = self.HEARTBEAT_INTERVAL
+        print("Port data reset (matching C kframe_reset_port)")
+
     def receive_worker(self):
         """Simple receive worker like CLI"""
         buffer = ""
@@ -570,9 +591,12 @@ class SimpleKFrameClient:
                 if self.response_timer > 0.0:
                     elapsed = time.time() - self.response_timer_start
                     if elapsed >= self.response_timer:
-                        print(f"Response timeout after {elapsed:.1f}s - connection may be lost")
+                        print(f"Response timeout after {elapsed:.1f}s - forcing connection reset (matching C implementation)")
                         self.response_timer = 0.0
-                        # Could implement reconnection logic here like C code
+                        # Match C implementation: TSKS_RESET on timeout
+                        self.stop()
+                        return
+
                 success = self.send_heartbeat()
                 if success:
                     print(f"Heartbeat sent (interval: {self.heartbeat_interval}s)")
@@ -580,6 +604,9 @@ class SimpleKFrameClient:
                     print("Heartbeat send failed")
     def start(self) -> bool:
         """Simple start like CLI - synchronous"""
+        # Reset all tally data before connecting - matches C implementation TSKS_RESET behavior
+        self.reset_port()
+
         if not self.connect():
             return False
         self.running = True
