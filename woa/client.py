@@ -7,6 +7,25 @@ import xml.etree.ElementTree as ET
 from collections import defaultdict, OrderedDict
 from typing import Any, Dict, List, Optional
 
+# Data completeness bit flags (matching kframe2.c)
+TC_EngSrc = 1 << 6                # Engineering sources (bit 6)
+TC_LogSrc_Base = 10               # Logical sources base bit
+TC_VPEInput_Base = 9              # VPE input contribution base bit
+TC_OutputTally_Base = 8           # Output tally map base bit
+
+def _suite_flag(base_bit: int, suite: int) -> int:
+    """Calculate suite-specific flag (3 bits per suite starting at base_bit)."""
+    return 1 << (base_bit + 3 * suite)
+
+def _required_flags(suite: int, include_output_tally: bool = False) -> int:
+    """Calculate required completeness mask for a suite."""
+    flags = TC_EngSrc
+    flags |= _suite_flag(TC_LogSrc_Base, suite)
+    flags |= _suite_flag(TC_VPEInput_Base, suite)
+    if include_output_tally:
+        flags |= _suite_flag(TC_OutputTally_Base, suite)
+    return flags
+
 class SimpleKFrameClient:
     """Simplified K-Frame Client - matches working CLI"""
     KFRAME_PORT = 2012
@@ -42,6 +61,11 @@ class SimpleKFrameClient:
         self.response_timer = 0.0
         self.response_timer_start = 0.0
         self.RESPONSE_TIMEOUT = 4.0  # RXTIME = 4000ms in C code
+        # Data completeness tracking (matching kframe2.c)
+        self.tally_complete = 0           # Bitfield tracking received messages
+        self.tally_request = 0            # Bitfield for pending requests
+        self.tx_cycle = 0                 # Heartbeat cycle counter for re-requests
+        self.required_mask = 0            # Calculated required data mask
     def connect(self) -> bool:
         """Connect to K-Frame - simple like CLI"""
         try:
@@ -87,12 +111,18 @@ class SimpleKFrameClient:
     </Authentication-Request>
 </ETP>
 """
+        # Calculate required data mask for all suites
+        self.required_mask = TC_EngSrc
+        for suite in range(4):  # Assuming max 4 suites
+            self.required_mask |= _suite_flag(TC_LogSrc_Base, suite)
+            self.required_mask |= _suite_flag(TC_VPEInput_Base, suite)
+            self.required_mask |= _suite_flag(TC_OutputTally_Base, suite)
+
         success = self.send_message(auth)
         if success:
             # Set response timer like C implementation
             self.response_timer_start = time.time()
             self.response_timer = self.RESPONSE_TIMEOUT
-            print("Authentication sent (response timer set)")
         return success
     def request_data(self) -> bool:
         """Request data - like CLI - including missing TallySubscription"""
@@ -117,32 +147,24 @@ class SimpleKFrameClient:
             # Set response timer like C implementation
             self.response_timer_start = time.time()
             self.response_timer = self.RESPONSE_TIMEOUT
-            print("Heartbeat sent (response timer set)")
         return success
     def process_xml_chunk(self, xml_text: str):
         """Simple processing like CLI"""
         try:
             # Simple string-based checks like CLI
             if '<VPEInputContribution' in xml_text:
-                print("Processing VPEInputContribution...")
                 self.process_vpe_input_simple(xml_text)
             elif '<VPEInputMap' in xml_text:
-                print("Processing VPEInputMap...")
                 self.process_vpe_input_simple(xml_text)
             elif '<EngineeringSourceMap' in xml_text:
-                print("Processing EngineeringSourceMap...")
                 self.process_engineering_source_map(xml_text)
             elif '<LogicalSourceMap' in xml_text:
-                print("Processing LogicalSourceMap...")
                 self.process_logical_source_map(xml_text)
             elif '<OutputTally' in xml_text:
-                print("Processing OutputTally...")
                 self.process_output_tally(xml_text)
             elif '<VPEOutputContribution' in xml_text:
-                print("Processing VPEOutputContribution...")
                 self.process_vpe_output_layers(xml_text)
             elif '<SetComplete/>' in xml_text:
-                print("Data set complete")
                 self.data_complete = True
                 # Switch to longer heartbeat interval like C implementation
                 self.heartbeat_interval = self.HEARTBEAT_INTERVAL_LONG
@@ -150,10 +172,8 @@ class SimpleKFrameClient:
             elif '<Heartbeat>' in xml_text:
                 # Handle heartbeat response like C implementation
                 self.last_heartbeat_response = time.time()
-                print("Heartbeat response received")
             elif '<Authentication>' in xml_text:
                 # Handle authentication response
-                print("Authentication response received")
                 self._send_initial_requests()
 
             # Match C implementation: Clear response timer on ANY valid message (RXR_ANYMSG behavior)
@@ -244,6 +264,11 @@ class SimpleKFrameClient:
                 for vpe_name in self.on_air_layers[suite_idx]:
                     if self.on_air_layers[suite_idx][vpe_name]:  # If this VPE has active layers
                         self.update_vpe_display(suite_idx, vpe_name)
+
+            # Set completeness flag for VPE input for this suite (message received = complete)
+            with self.lock:
+                self.tally_complete |= _suite_flag(TC_VPEInput_Base, suite_index)
+
             self.trigger_gui_update()
         except Exception as e:
             print(f"VPE input parse error: {e}")
@@ -294,6 +319,8 @@ class SimpleKFrameClient:
                 for out_num, data in sorted(outputs.items()):
                     current[out_num] = data
                 self.all_outputs[suite_index] = current
+                # Set completeness flag for output tally for this suite
+                self.tally_complete |= _suite_flag(TC_OutputTally_Base, suite_index)
             for suite_index, aux_updates in updates_by_suite.items():
                 if is_full:
                     self.aux_assignments[suite_index].clear()
@@ -460,6 +487,8 @@ class SimpleKFrameClient:
             self.logical_sources[suite_index] = logical_map
             if logical_map:
                 self.logical_suites_ready.add(suite_index)
+                # Set completeness flag for logical sources for this suite
+                self.tally_complete |= _suite_flag(TC_LogSrc_Base, suite_index)
             else:
                 self.logical_suites_ready.discard(suite_index)
             if is_full:
@@ -512,6 +541,9 @@ class SimpleKFrameClient:
                     merged[eng_id] = data
             self.engineering_sources = merged
             self.engineering_sources_ready = bool(merged)
+            # Set completeness flag for engineering sources
+            if self.engineering_sources_ready:
+                self.tally_complete |= TC_EngSrc
         self.trigger_gui_update()
     def register_update_callback(self, callback):
         """Register a callable that fires when fresh data arrives."""
@@ -542,6 +574,56 @@ class SimpleKFrameClient:
             self.gui.root.after_idle(self.gui.update_display)
         self._notify_update_callbacks()
 
+    def _check_data_complete(self) -> bool:
+        """Check if all required tally data has been received."""
+        return (self.tally_complete & self.required_mask) == self.required_mask
+
+    def _request_missing_data(self):
+        """Request missing tally data based on tally_request bitfield."""
+        if not self.socket or not self.connected:
+            return
+
+        try:
+            # Request EngineeringSources if missing
+            if self.tally_request & TC_EngSrc:
+                print("Re-requesting EngineeringSourceMap")
+                self.socket.send(b"<ETP>\n<EngineeringSourceMap-Request/>\n</ETP>\n")
+                time.sleep(0.05)  # Match C implementation delay
+
+            # Check which suites need data re-requested
+            suites_needing_logsrc = []
+            suites_needing_vpeinput = []
+            suites_needing_outputtally = []
+
+            for suite in range(4):  # Max 4 suites
+                if self.tally_request & _suite_flag(TC_LogSrc_Base, suite):
+                    suites_needing_logsrc.append(suite + 1)
+                if self.tally_request & _suite_flag(TC_VPEInput_Base, suite):
+                    suites_needing_vpeinput.append(suite + 1)
+                if self.tally_request & _suite_flag(TC_OutputTally_Base, suite):
+                    suites_needing_outputtally.append(suite + 1)
+
+            # Re-request LogicalSourceMap (applies to all subscribed suites)
+            if suites_needing_logsrc:
+                print(f"Re-requesting LogicalSourceMap (missing for suites: {suites_needing_logsrc})")
+                self.socket.send(b"<ETP>\n<LogicalSourceMap-Request/>\n</ETP>\n")
+                time.sleep(0.05)
+
+            # Re-request VPEInputMap (applies to all subscribed suites)
+            if suites_needing_vpeinput:
+                print(f"Re-requesting VPEInputMap (missing for suites: {suites_needing_vpeinput})")
+                self.socket.send(b"<ETP>\n<VPEInputMap-Request/>\n</ETP>\n")
+                time.sleep(0.05)
+
+            # Re-request OutputTallyMap (applies to all subscribed suites)
+            if suites_needing_outputtally:
+                print(f"Re-requesting OutputTallyMap (missing for suites: {suites_needing_outputtally})")
+                self.socket.send(b"<ETP>\n<OutputTallyMap-Request/>\n</ETP>\n")
+                time.sleep(0.05)
+
+        except Exception as e:
+            print(f"Re-request failed: {e}")
+
     def reset_port(self):
         """Reset all tally data structures - matches kframe_reset_port() in C implementation"""
         with self.lock:
@@ -557,6 +639,10 @@ class SimpleKFrameClient:
             self.logical_suites_ready = set()
             self.data_complete = False
             self.heartbeat_interval = self.HEARTBEAT_INTERVAL
+            # Reset completeness tracking
+            self.tally_complete = 0
+            self.tally_request = 0
+            self.tx_cycle = 0
         print("Port data reset (matching C kframe_reset_port)")
 
     def receive_worker(self):
@@ -587,6 +673,9 @@ class SimpleKFrameClient:
         while self.running:
             time.sleep(self.heartbeat_interval)
             if self.running:
+                # Increment cycle counter
+                self.tx_cycle += 1
+
                 # Check response timer like C implementation
                 if self.response_timer > 0.0:
                     elapsed = time.time() - self.response_timer_start
@@ -597,10 +686,28 @@ class SimpleKFrameClient:
                         self.stop()
                         return
 
+                # Re-request missing data every 8 cycles if incomplete
+                if self.tx_cycle >= 8:
+                    self.tx_cycle = 0
+                    # Check completeness and update old flag
+                    with self.lock:
+                        is_complete = (self.tally_complete & self.required_mask) == self.required_mask
+                        if not is_complete:
+                            # Calculate missing data
+                            self.tally_request = ~self.tally_complete & self.required_mask
+                        else:
+                            # Update old data_complete flag and adjust heartbeat interval
+                            if not self.data_complete:
+                                self.data_complete = True
+                                self.heartbeat_interval = self.HEARTBEAT_INTERVAL_LONG
+                                print("All required tally data received - switching to long heartbeat interval")
+
+                    if not is_complete:
+                        print("Data incomplete - re-requesting missing data")
+                        self._request_missing_data()
+
                 success = self.send_heartbeat()
-                if success:
-                    print(f"Heartbeat sent (interval: {self.heartbeat_interval}s)")
-                else:
+                if not success:
                     print("Heartbeat send failed")
     def start(self) -> bool:
         """Simple start like CLI - synchronous"""
