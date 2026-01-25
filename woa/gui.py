@@ -1530,6 +1530,39 @@ class VisualOnAirGUI(FloatingWindowMixin):
             }
         return state
 
+    def _extract_me_key(self, value: str) -> Optional[int]:
+        """Extract ME number from content string. Returns ME number (1-4) or None."""
+        if not isinstance(value, str):
+            return None
+        import re
+        normalized = value.upper()
+        # Match ME references anywhere in the string:
+        # - "M1 A", "M2 B", "M3 A" etc. (K-Frame output format)
+        # - "ME1", "ME2", "ME3" etc. (direct ME reference)
+        match = re.search(r'\bM(?:E)?(\d{1,2})\s+[A-Z]', normalized)
+        if match:
+            me_num = int(match.group(1))
+            if 1 <= me_num <= 4:
+                return me_num
+        return None
+
+    def _resolve_cascade_chain(self, current_data: dict, start_key: str) -> set:
+        """Resolve cascade chain. Returns set of ME numbers (1-4) that should be highlighted red."""
+        result = set()
+        visited = set()
+        current_content = current_data.get(start_key, '')
+
+        while current_content:
+            me_num = self._extract_me_key(current_content)
+            if not me_num or me_num in visited:
+                break
+            visited.add(me_num)
+            result.add(me_num)
+            # Follow the chain
+            current_content = current_data.get(f'ME{me_num}', '')
+
+        return result
+
     def _render_display_from_state(self, state: dict[str, object], *, connected: bool) -> None:
         if not state or not state.get('source_names'):
             self._display_not_connected_state()
@@ -1546,6 +1579,8 @@ class VisualOnAirGUI(FloatingWindowMixin):
                 suite_index = 0
             self._update_single_suite_header()
             current_data = current_on_air.get(suite_index, {}) if isinstance(current_on_air, dict) else {}
+            # Resolve cascade tally chain
+            cascade_mes = self._resolve_cascade_chain(current_data, 'PGM')
             if 'pgm' in self.boxes[view_mode]:
                 box_data = self.boxes[view_mode]['pgm']
                 self.update_content_frame(box_data['content_frame'], current_data.get('PGM', ''), '#cc0000', box_data)
@@ -1553,13 +1588,17 @@ class VisualOnAirGUI(FloatingWindowMixin):
                 key = f'me{me_num}'
                 if key in self.boxes[view_mode]:
                     box_data = self.boxes[view_mode][key]
-                    self.update_content_frame(box_data['content_frame'], current_data.get(f'ME{me_num}', ''), '#0066cc', box_data)
+                    # Color red if this ME is in the cascade chain, otherwise blue
+                    color = '#cc0000' if me_num in cascade_mes else '#0066cc'
+                    self.update_content_frame(box_data['content_frame'], current_data.get(f'ME{me_num}', ''), color, box_data)
         elif view_mode == "2":
             base_suite = 2 if self.suite_var.get() == "Suite3-4" else 0
             self._update_multi_suite_headers()
             for offset in range(2):
                 suite_idx = base_suite + offset
                 current_data = current_on_air.get(suite_idx, {}) if isinstance(current_on_air, dict) else {}
+                # Resolve cascade tally chain for this suite
+                cascade_mes = self._resolve_cascade_chain(current_data, 'PGM')
                 key = f's{offset}_pgm'
                 if key in self.boxes[view_mode]:
                     box_data = self.boxes[view_mode][key]
@@ -1568,11 +1607,15 @@ class VisualOnAirGUI(FloatingWindowMixin):
                     key = f's{offset}_me{me_num}'
                     if key in self.boxes[view_mode]:
                         box_data = self.boxes[view_mode][key]
-                        self.update_content_frame(box_data['content_frame'], current_data.get(f'ME{me_num}', ''), '#0066cc', box_data)
+                        # Color red if this ME is in the cascade chain, otherwise blue
+                        color = '#cc0000' if me_num in cascade_mes else '#0066cc'
+                        self.update_content_frame(box_data['content_frame'], current_data.get(f'ME{me_num}', ''), color, box_data)
         else:
             self._update_multi_suite_headers()
             for suite_idx in range(4):
                 current_data = current_on_air.get(suite_idx, {}) if isinstance(current_on_air, dict) else {}
+                # Resolve cascade tally chain for this suite
+                cascade_mes = self._resolve_cascade_chain(current_data, 'PGM')
                 key = f's{suite_idx}_pgm'
                 if key in self.boxes[view_mode]:
                     box_data = self.boxes[view_mode][key]
@@ -1581,7 +1624,9 @@ class VisualOnAirGUI(FloatingWindowMixin):
                     key = f's{suite_idx}_me{me_num}'
                     if key in self.boxes[view_mode]:
                         box_data = self.boxes[view_mode][key]
-                        self.update_content_frame(box_data['content_frame'], current_data.get(f'ME{me_num}', ''), '#0066cc', box_data)
+                        # Color red if this ME is in the cascade chain, otherwise blue
+                        color = '#cc0000' if me_num in cascade_mes else '#0066cc'
+                        self.update_content_frame(box_data['content_frame'], current_data.get(f'ME{me_num}', ''), color, box_data)
 
         suites_for_view = self._resolve_view_suites()
 
