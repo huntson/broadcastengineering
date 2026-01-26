@@ -1750,12 +1750,56 @@ class VisualOnAirGUI(FloatingWindowMixin):
             self._update_single_suite_header()
         else:
             self._update_multi_suite_headers()
+    def _flash_yellow(self, content_frame, box_data):
+        """Flash yellow border/highlight when content changes"""
+        # Cancel any existing timer
+        if 'flash_timer' in box_data and box_data['flash_timer']:
+            self.root.after_cancel(box_data['flash_timer'])
+
+        # Get the parent box frame (2 levels up: content_frame -> inner_frame -> box_frame)
+        parent = content_frame.master
+        if parent and parent.master:
+            box_frame = parent.master
+            # Store original properties
+            if 'original_highlightthickness' not in box_data:
+                box_data['original_highlightthickness'] = box_frame.cget('highlightthickness')
+                box_data['original_highlightbackground'] = box_frame.cget('highlightbackground')
+
+            # Apply yellow flash
+            box_frame.config(
+                highlightthickness=4,
+                highlightbackground='#FFD666',
+                highlightcolor='#FFD666'
+            )
+
+            # Schedule removal of flash after 2.5 seconds
+            def remove_flash():
+                box_frame.config(
+                    highlightthickness=box_data.get('original_highlightthickness', 2),
+                    highlightbackground=box_data.get('original_highlightbackground', 'white'),
+                    highlightcolor=box_data.get('original_highlightbackground', 'white')
+                )
+                box_data['flash_timer'] = None
+
+            box_data['flash_timer'] = self.root.after(2500, remove_flash)
+
     def update_content_frame(self, content_frame, content, bg_color, box_data):
         """Update content frame with mixed-color labels that center properly"""
+        # Track if content changed for yellow flash
+        previous_content = box_data.get('current_content')
+        content_changed = box_data.get('initialized', False) and previous_content != content
+
         # Only update if content changed
-        if box_data.get('current_content') == content:
+        if previous_content == content:
             return
+
         box_data['current_content'] = content
+        box_data['initialized'] = True
+
+        # Trigger yellow flash if content changed
+        if content_changed:
+            self._flash_yellow(content_frame, box_data)
+
         # Clear existing content
         for widget in content_frame.winfo_children():
             widget.destroy()
