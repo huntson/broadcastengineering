@@ -52,6 +52,8 @@ for i in range(1, 5):
     PARAMS[f"sdi{i}"] = f"eParamID_Vid{i}DetectedInputFormat"
     PARAMS[f"vid{i}"] = f"eParamID_Vid{i}OutputFormat"
     PARAMS[f"tpg{i}"] = f"eParamID_Vid{i}VideoOutputMode"
+    PARAMS[f"audioDelay{i}"] = f"eParamID_AudioDelayGlobal_SDI{i}"
+    PARAMS[f"frameDelay{i}"] = f"eParamID_Vid{i}ExtraFrameDelay"
 
 
 def _coerce_int(val):
@@ -185,7 +187,7 @@ def poll_unit(ip, model="FS4/HDR"):
     out = {"ip": ip, "error": False, "data": {}}
     max_ch = 2 if model == "FS2" else 4      # ← NEW
     for key, pid in PARAMS.items():
-        if (m := re.match(r"(sdi|vid|tpg)(\d+)", key)) and int(m.group(2)) > max_ch:
+        if (m := re.match(r"(sdi|vid|tpg|audioDelay|frameDelay)(\d+)", key)) and int(m.group(2)) > max_ch:
             continue
         actual_pid = pid + "_5923" if key.startswith("vid") else pid
         try:
@@ -229,13 +231,35 @@ def poll_unit(ip, model="FS4/HDR"):
                 # Test pattern is enabled if value is 4 (Test Pattern mode)
                 out["data"][key] = (val == "4" or val == 4)
 
+            # ---------- AUDIO DELAY ----------
+            elif key.startswith("audioDelay"):
+                val = js.get("value", 0)
+                try:
+                    out["data"][key] = int(val)
+                except (ValueError, TypeError):
+                    out["data"][key] = 0
+
+            # ---------- FRAME DELAY ----------
+            elif key.startswith("frameDelay"):
+                val = js.get("value", 0)
+                try:
+                    out["data"][key] = int(val)
+                except (ValueError, TypeError):
+                    out["data"][key] = 0
+
             # ---------- everything else ----------
             else:
                 out["data"][key] = js.get("value_name", js.get("value", "ERR"))
 
         except Exception:
-            out["error"]      = True
-            out["data"][key]  = "ERR"
+            # Don't mark whole unit as error if only delay params fail
+            if not key.startswith("audioDelay") and not key.startswith("frameDelay"):
+                out["error"] = True
+            # Set default values for delay params on error
+            if key.startswith("audioDelay") or key.startswith("frameDelay"):
+                out["data"][key] = 0
+            else:
+                out["data"][key] = "ERR"
 
     return out
 
@@ -584,6 +608,27 @@ MAIN_TEMPLATE = """
                 list-style:none;margin:0;padding:0;max-height:200px;overflow-y:auto;z-index:100;display:none}
  .dropdown-menu li{padding:.3em .5em;cursor:pointer}
  .dropdown-menu li:hover{background:var(--border)}
+
+/* Badge Styles */
+ .tile-badges {
+   position: absolute;
+   top: 2px;
+   left: 2px;
+   display: flex;
+   gap: 2px;
+   z-index: 10;
+ }
+
+ .delay-badge {
+   background: #ff9800;
+   color: #fff;
+   padding: 1px 4px;
+   border-radius: 3px;
+   font-size: 0.65em;
+   font-weight: bold;
+   line-height: 1.2;
+   box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+ }
 
 /* Preset Dialog Styles */
 #preset-dialog {
@@ -1408,7 +1453,18 @@ btn.addEventListener('click', e => {
     getComputedStyle(menu).display === 'block' ? 'none' : 'block';
 });
 
-        t.innerHTML = `<div><strong>${labels[i-1]}</strong></div>
+        // Build badges for this channel
+        const audioDelay = u.data['audioDelay'+i] || 0;
+        const frameDelay = u.data['frameDelay'+i] || 0;
+        const delayEnabled = audioDelay > 0 || frameDelay > 0;
+        let badges = '';
+        if (delayEnabled) {
+          badges = '<div class="tile-badges">';
+          badges += '<span class="delay-badge">DLY</span>';
+          badges += '</div>';
+        }
+
+        t.innerHTML = `${badges}<div><strong>${labels[i-1]}</strong></div>
                        <div>IN: ${sdi}</div><div>OUT: ${display}</div>`;
         dd.appendChild(btn);
         dd.appendChild(menu);
