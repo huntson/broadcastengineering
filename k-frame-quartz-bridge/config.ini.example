@@ -1,0 +1,43 @@
+[gv]
+# IP address of the Grass Valley K-Frame switcher
+host = 127.0.0.1
+
+# Suite identifier (suite1a, suite1b, suite2a, suite2b, suite3a, suite3b, suite4a, suite4b)
+suite = suite1a
+
+# Local address to bind GV plugin sockets to
+bind_host = 0.0.0.0
+
+# Connection protocol: auto, tcp, or udp
+protocol = auto
+
+[quartz]
+# Address and port for the Quartz ASCII router server
+# Use 0.0.0.0 to allow Quartz panels on the network to connect
+listen_host = 127.0.0.1
+listen_port = 4000
+
+[http]
+# Address and port for the status/monitoring web UI
+# Use 0.0.0.0 to allow access from other machines
+listen_host = 127.0.0.1
+listen_port = 4001
+
+[router]
+# Number of sources and destinations to report to Quartz clients
+sources = 809
+destinations = 96
+
+[mappings]
+# Optional JSON mappings (Quartz number -> K-Frame number)
+# dest_mappings = {"1":1,"2":2,"3":3}
+# src_mappings = {"1":1,"2":2}
+
+[names]
+# Optional JSON name overrides
+# dest_names = {"1":"AUX1","2":"AUX2"}
+# src_names = {"1":"CAM1","2":"CAM2"}
+
+[logging]
+# Log level: DEBUG, INFO, WARNING, ERROR
+level = INFO

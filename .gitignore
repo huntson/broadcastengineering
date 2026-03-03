@@ -39,6 +39,7 @@ credentials.json
 
 # User configuration (each user should have their own)
 cobalt-name-editor/config.ini
+k-frame-quartz-bridge/config.ini
 
 # PyInstaller build artifacts
 build/
@@ -47,4 +48,5 @@ build/
 # Ignore exe files and download folders
 *.exe
 cobalt-name-editor/dist/
+k-frame-quartz-bridge/dist/
 cobalt-name-editor/download/
