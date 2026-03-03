@@ -35,19 +35,69 @@ Pre-built Windows executable available - no Python installation required!
 
 ## Configuration
 
-Create a `config.ini` file in the same directory as the executable:
+Create a `config.ini` file in the same directory as the executable. A complete example is provided in `config.ini.example`.
+
+### Required Settings
+
+**[gv] - Grass Valley K-Frame Connection**
+- `host` - IP address of the K-Frame switcher (e.g., `192.168.1.100`)
+- `suite` - Suite identifier: `suite1a`, `suite1b`, `suite2a`, `suite2b`, `suite3a`, `suite3b`, `suite4a`, or `suite4b`
+- `bind_host` - Local address to bind GV plugin sockets to (default: `0.0.0.0`)
+- `protocol` - Connection protocol: `auto`, `tcp`, or `udp` (default: `auto`)
+
+**[quartz] - Quartz Router Server**
+- `listen_host` - Address to listen on (use `0.0.0.0` to allow network access, or `127.0.0.1` for local only)
+- `listen_port` - Port for Quartz clients to connect (default: `4000`)
+
+**[http] - Status Web UI**
+- `listen_host` - Address for web UI (use `0.0.0.0` to allow network access, or `127.0.0.1` for local only)
+- `listen_port` - Port for web interface (default: `4001`)
+
+**[router] - Router Configuration**
+- `sources` - Number of sources to report to Quartz clients (default: `809`)
+- `destinations` - Number of destinations to report to Quartz clients (default: `96`)
+
+### Optional Settings
+
+**[mappings] - Custom Mappings** (JSON format)
+- `dest_mappings` - Map Quartz destination numbers to K-Frame AUX bus numbers
+  - Example: `{"1":1, "2":2, "3":3}`
+- `src_mappings` - Map Quartz source numbers to K-Frame source numbers
+  - Example: `{"1":1, "2":2}`
+
+**[names] - Name Overrides** (JSON format)
+- `dest_names` - Custom names for destinations
+  - Example: `{"1":"AUX1", "2":"AUX2"}`
+- `src_names` - Custom names for sources
+  - Example: `{"1":"CAM1", "2":"CAM2"}`
+
+**[logging] - Logging Level**
+- `level` - Log verbosity: `DEBUG`, `INFO`, `WARNING`, or `ERROR` (default: `INFO`)
+
+### Example Configuration
 
 ```ini
-[GV]
-host = your-kframe-host
-suite = 1
+[gv]
+host = 192.168.1.100
+suite = suite1a
+bind_host = 0.0.0.0
+protocol = auto
 
-[Quartz]
-host = your-quartz-host
-port = 32400
+[quartz]
+listen_host = 0.0.0.0
+listen_port = 4000
+
+[http]
+listen_host = 0.0.0.0
+listen_port = 4001
+
+[router]
+sources = 809
+destinations = 96
+
+[logging]
+level = INFO
 ```
-
-See `config.ini.example` for a complete configuration template.
 
 ## Usage
 
