@@ -6,6 +6,7 @@ import sys
 import webbrowser
 from pathlib import Path
 import configparser
+from license import LicenseManager, LicenseStatus, storage
 
 
 SUITES = [
@@ -75,6 +76,9 @@ class BridgeGUI:
             except Exception:
                 pass
 
+        self.license_manager = LicenseManager(self.root, self._on_license_status_changed)
+        self.license_manager.ensure_dialog()
+
         self._create_menu()
         self._create_content()
 
@@ -99,6 +103,8 @@ class BridgeGUI:
 
         help_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="Help", menu=help_menu)
+        help_menu.add_command(label="License...", command=self._show_license_dialog)
+        help_menu.add_separator()
         help_menu.add_command(label="About", command=self._show_about)
 
     def _create_content(self):
@@ -329,6 +335,18 @@ class BridgeGUI:
 
         dialog.transient(self.root)
         dialog.grab_set()
+
+    def _show_license_dialog(self):
+        """Show license dialog."""
+        if self.license_manager:
+            self.license_manager.show_dialog()
+
+    def _on_license_status_changed(self, status: LicenseStatus) -> None:
+        """Handle license status changes."""
+        if status.ok:
+            self.update_status(f"Licensed to: {status.name}")
+        else:
+            self.update_status(f"License: {status.reason}")
 
     def _show_about(self):
         """Show about dialog."""

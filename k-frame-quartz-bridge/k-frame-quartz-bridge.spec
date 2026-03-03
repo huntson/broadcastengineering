@@ -9,6 +9,7 @@ a = Analysis(
     datas=[
         ('VERSION', '.'),
         ('config.ini.example', '.'),
+        ('license/lic_public.key', 'license'),
     ],
     hiddenimports=[
         'tkinter',
