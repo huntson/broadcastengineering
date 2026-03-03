@@ -58,12 +58,6 @@ class BridgeMappings:
 
 
 @dataclass
-class RouterNames:
-    sources: Dict[int, str] = field(default_factory=dict)
-    destinations: Dict[int, str] = field(default_factory=dict)
-
-
-@dataclass
 class HTTPConfig:
     listen_host: str = "127.0.0.1"
     listen_port: int = 4001
@@ -97,7 +91,6 @@ class BridgeState:
     gv_suite: str
     dest_to_aux: Dict[int, int]
     source_to_input: Dict[int, int]
-    names: RouterNames
     routes: Dict[str, Dict[int, int]] = field(default_factory=dict)
     clients: Dict[str, datetime] = field(default_factory=dict)
     gv_connected: bool = False
@@ -154,7 +147,6 @@ class BridgeConfig:
     gv: GVConfig
     router: RouterConfig
     mappings: BridgeMappings
-    names: RouterNames
     http: HTTPConfig
 
     @staticmethod
@@ -163,14 +155,6 @@ class BridgeConfig:
         if raw:
             for k, v in json.loads(raw).items():
                 result[int(k)] = int(v)
-        return result
-
-    @staticmethod
-    def _parse_json_str_dict(raw: str) -> Dict[int, str]:
-        result: Dict[int, str] = {}
-        if raw:
-            for k, v in json.loads(raw).items():
-                result[int(k)] = str(v)
         return result
 
     @staticmethod
@@ -194,15 +178,6 @@ class BridgeConfig:
         dest_map = BridgeConfig._parse_json_dict(os.environ.get("DEST_MAPPINGS", ""))
         source_map = BridgeConfig._parse_json_dict(os.environ.get("SRC_MAPPINGS", ""))
 
-        dest_names = BridgeConfig._parse_json_str_dict(os.environ.get("DEST_NAMES", ""))
-        if not dest_names:
-            for i in range(1, destinations + 1):
-                dest_names[i] = f"AUX{i}"
-
-        src_names = BridgeConfig._parse_json_str_dict(os.environ.get("SRC_NAMES", ""))
-
-        names = RouterNames(sources=src_names, destinations=dest_names)
-
         http_cfg = HTTPConfig(
             listen_host=os.environ.get("HTTP_LISTEN_HOST", "127.0.0.1"),
             listen_port=int(os.environ.get("HTTP_LISTEN_PORT", "4001")),
@@ -212,7 +187,6 @@ class BridgeConfig:
             gv=gv_cfg,
             router=router_cfg,
             mappings=BridgeMappings(dest_to_aux=dest_map, source_to_input=source_map),
-            names=names,
             http=http_cfg,
         )
 
@@ -244,19 +218,6 @@ class BridgeConfig:
             config.get("mappings", "src_mappings", fallback="")
         )
 
-        dest_names = BridgeConfig._parse_json_str_dict(
-            config.get("names", "dest_names", fallback="")
-        )
-        if not dest_names:
-            for i in range(1, destinations + 1):
-                dest_names[i] = f"AUX{i}"
-
-        src_names = BridgeConfig._parse_json_str_dict(
-            config.get("names", "src_names", fallback="")
-        )
-
-        names = RouterNames(sources=src_names, destinations=dest_names)
-
         http_cfg = HTTPConfig(
             listen_host=config.get("http", "listen_host", fallback="127.0.0.1"),
             listen_port=config.getint("http", "listen_port", fallback=4001),
@@ -266,7 +227,6 @@ class BridgeConfig:
             gv=gv_cfg,
             router=router_cfg,
             mappings=BridgeMappings(dest_to_aux=dest_map, source_to_input=source_map),
-            names=names,
             http=http_cfg,
         )
 
@@ -815,7 +775,7 @@ class QuartzRouterServer:
         if match:
             src = int(match.group(1))
             logger.info("Source name request: %s", src)
-            name = self.cfg.names.sources.get(src, f"SRC{src:03d}")
+            name = f"SRC{src:03d}"
             # Quartz expects up to 8 chars on line 1; we leave trimming to client
             return self._respond([f".RAS{src:03d}{name}"])
 
@@ -824,7 +784,7 @@ class QuartzRouterServer:
         if match:
             dest = int(match.group(1))
             logger.info("Destination name request: %s", dest)
-            name = self.cfg.names.destinations.get(dest, f"DEST{dest:03d}")
+            name = f"AUX{dest}"
             return self._respond([f".RAD{dest:03d}{name}"])
 
 
@@ -1041,8 +1001,6 @@ class StatusHTTPServer:
 
 <script>
 const REFRESH_MS = 2000;
-const destNames = JSON.parse(''' + json.dumps(json.dumps({str(k): v for k, v in self.state.names.destinations.items()})).replace('</', r'<\/') + ''');
-const srcNames = JSON.parse(''' + json.dumps(json.dumps({str(k): v for k, v in self.state.names.sources.items()})).replace('</', r'<\/') + ''');
 
 function esc(s) { const d = document.createElement("div"); d.textContent = s; return d.innerHTML; }
 function fmt(iso) { try { return new Date(iso).toLocaleTimeString(); } catch { return iso; } }
@@ -1115,8 +1073,8 @@ async function refresh() {
     } else {
       let h = "";
       routeEntries.forEach(([level, dest, info]) => {
-        const dl = destNames[String(dest)] || ("DEST" + String(dest).padStart(3, "0"));
-        const sl = srcNames[String(info.source)] || ("SRC" + String(info.source).padStart(3, "0"));
+        const dl = "AUX" + String(dest);
+        const sl = "SRC" + String(info.source).padStart(3, "0");
         h += "<tr" + (changed ? ' class="pulse"' : "") + ">" +
           "<td>" + esc(level) + "</td>" +
           "<td>" + dest + "</td>" +
@@ -1167,7 +1125,6 @@ async def bridge_main(cfg: Optional[BridgeConfig] = None) -> None:
         gv_suite=cfg.gv.suite,
         dest_to_aux=dict(cfg.mappings.dest_to_aux),
         source_to_input=dict(cfg.mappings.source_to_input),
-        names=cfg.names,
     )
     gv_controller = GVSwitchController(cfg.gv, cfg.router, state)
     server = QuartzRouterServer(cfg, gv_controller, state)

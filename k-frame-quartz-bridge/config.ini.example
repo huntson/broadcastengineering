@@ -33,11 +33,6 @@ destinations = 96
 # dest_mappings = {"1":1,"2":2,"3":3}
 # src_mappings = {"1":1,"2":2}
 
-[names]
-# Optional JSON name overrides
-# dest_names = {"1":"AUX1","2":"AUX2"}
-# src_names = {"1":"CAM1","2":"CAM2"}
-
 [logging]
 # Log level: DEBUG, INFO, WARNING, ERROR
 level = INFO

@@ -65,12 +65,6 @@ Create a `config.ini` file in the same directory as the executable. A complete e
 - `src_mappings` - Map Quartz source numbers to K-Frame source numbers
   - Example: `{"1":1, "2":2}`
 
-**[names] - Name Overrides** (JSON format)
-- `dest_names` - Custom names for destinations
-  - Example: `{"1":"AUX1", "2":"AUX2"}`
-- `src_names` - Custom names for sources
-  - Example: `{"1":"CAM1", "2":"CAM2"}`
-
 **[logging] - Logging Level**
 - `level` - Log verbosity: `DEBUG`, `INFO`, `WARNING`, or `ERROR` (default: `INFO`)
 
