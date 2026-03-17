@@ -14,6 +14,13 @@ device web UI — all from a single dashboard.
 
 Device type is auto-detected from the firmware file.
 
+## Download
+
+Pre-built VirtualBox appliances (no build required):
+
+- [Apple Silicon (ARM64)](virtualbox/output/fs-emu-aarch64.ova)
+- [Intel/AMD (x86_64)](virtualbox/output/fs-emu-x86_64.ova)
+
 ## Quick Start (VirtualBox)
 
 1. Install [VirtualBox](https://www.virtualbox.org/wiki/Downloads)
