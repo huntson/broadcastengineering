@@ -1,0 +1,21 @@
+#!/sbin/openrc-run
+
+name="fs-emu"
+description="AJA FS Emulator Control Panel"
+
+command="/usr/bin/python3"
+command_args="/opt/fs-emu/app.py"
+directory="/opt/fs-emu"
+command_background=true
+pidfile="/run/${name}.pid"
+output_log="/var/log/${name}.log"
+error_log="/var/log/${name}.log"
+
+depend() {
+    need net
+    after firewall
+}
+
+start_pre() {
+    mkdir -p /opt/fs-emu/data
+}

@@ -1,0 +1,214 @@
+#!/bin/sh
+export PATH=/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin
+export LD_LIBRARY_PATH=/usr/local/lib:/usr/lib:/lib
+export PRODUCT_ID=TORU
+
+mount -t proc proc /proc
+mount -t sysfs sysfs /sys
+mount -t devtmpfs devtmpfs /dev
+mkdir -p /dev/pts /dev/shm /tmp /var/run /var/log /var/tmp
+mount -t devpts devpts /dev/pts
+mount -t tmpfs -o size=128m tmpfs /tmp
+mount -t tmpfs tmpfs /var/run
+mount -t tmpfs tmpfs /dev/shm
+mkdir -p /tmp/aja
+
+hostname FS-HDR
+ldconfig 2>/dev/null
+
+echo ""
+echo "================================="
+echo " AJA FS-HDR v4.3.1.2 (emulated)"
+echo "================================="
+echo ""
+
+# ===============================================
+# Networking (before flash — needed for config restore)
+# ===============================================
+echo "[init] Configuring network..."
+ifconfig lo 127.0.0.1 up
+ifconfig eth0 up 2>/dev/null
+udhcpc -i eth0 -q 2>/dev/null
+if [ $? -ne 0 ]; then
+    ifconfig eth0 10.0.2.15 netmask 255.255.255.0 up
+    route add default gw 10.0.2.2
+fi
+echo "[init] IP: $(ifconfig eth0 2>/dev/null | grep 'inet addr' | awk -F: '{print $2}' | awk '{print $1}')"
+
+# ===============================================
+# Setup block2mtd + fake names
+# ===============================================
+FLASK_URL="http://10.0.2.2:5050"
+
+for i in 0 1 2 3 4 5 6 7; do
+    mknod /dev/loop${i} b 7 ${i} 2>/dev/null || true
+done
+mkdir -p /tmp/flash
+
+# Helper: restore flash image from host or create empty
+restore_or_create() {
+    local name="$1" size_arg="$2" size_unit="$3"
+    if wget -q -O "/tmp/flash/${name}.img" "${FLASK_URL}/api/flash/download/${name}" 2>/dev/null; then
+        echo "[init] Restored ${name} from saved state"
+    else
+        dd if=/dev/zero of="/tmp/flash/${name}.img" bs="1${size_unit}" count="${size_arg}" 2>/dev/null
+        echo "[init] Created empty ${name}"
+    fi
+}
+
+# SafeBoot — never restored (not user config)
+dd if=/dev/zero of=/tmp/flash/safeboot.img bs=1M count=8 2>/dev/null
+losetup /dev/loop0 /tmp/flash/safeboot.img
+echo "/dev/loop0,131072" > /sys/module/block2mtd/parameters/block2mtd 2>/dev/null
+
+restore_or_create configa 256 k
+losetup /dev/loop1 /tmp/flash/configa.img
+echo "/dev/loop1,131072" > /sys/module/block2mtd/parameters/block2mtd 2>/dev/null
+
+restore_or_create configb 256 k
+losetup /dev/loop2 /tmp/flash/configb.img
+echo "/dev/loop2,131072" > /sys/module/block2mtd/parameters/block2mtd 2>/dev/null
+
+restore_or_create presetsa 11520 k
+losetup /dev/loop3 /tmp/flash/presetsa.img
+echo "/dev/loop3,131072" > /sys/module/block2mtd/parameters/block2mtd 2>/dev/null
+
+restore_or_create presetsb 11520 k
+losetup /dev/loop4 /tmp/flash/presetsb.img
+echo "/dev/loop4,131072" > /sys/module/block2mtd/parameters/block2mtd 2>/dev/null
+
+sleep 1
+
+cat > /tmp/fake_proc_mtd << 'FAKEMTD'
+dev:    size   erasesize  name
+mtd0: 01000000 00020000 "CS0"
+mtd1: 00800000 00020000 "SafeBoot"
+mtd2: 00040000 00020000 "ConfigA"
+mtd3: 00040000 00020000 "ConfigB"
+mtd4: 00b40000 00020000 "Presets_A"
+mtd5: 00b40000 00020000 "Presets_B"
+FAKEMTD
+mount --bind /tmp/fake_proc_mtd /proc/mtd
+
+for dev_name in "2:ConfigA" "3:ConfigB" "4:Presets_A" "5:Presets_B" "1:SafeBoot" "0:CS0"; do
+    num="${dev_name%%:*}"
+    name="${dev_name#*:}"
+    if [ -e /sys/class/mtd/mtd${num}/name ]; then
+        echo -n "$name" > /tmp/fake_mtd${num}_name
+        mount --bind /tmp/fake_mtd${num}_name /sys/class/mtd/mtd${num}/name 2>/dev/null
+    fi
+done
+
+chmod 666 /dev/mtd* 2>/dev/null
+chmod 666 /dev/mtdblock* 2>/dev/null
+
+echo "[init] MTD ready:"
+cat /proc/mtd
+
+# ===============================================
+# Web template processing
+# ===============================================
+echo "[init] Processing web templates..."
+cp /var/www/html/index.tmpl /var/www/html/index.html
+sed -i 's/product_name_text/FS-HDR/g' /var/www/html/index.html 2>/dev/null
+sed -i 's/confirm_button_text/Confirm/g' /var/www/html/index.html 2>/dev/null
+sed -i 's/reboot_message_text/Rebooting.../g' /var/www/html/index.html 2>/dev/null
+sed -i 's/preset_status_text//g' /var/www/html/index.html 2>/dev/null
+sed -i 's/message_text//g' /var/www/html/index.html 2>/dev/null
+sed -i 's/static_text//g' /var/www/html/index.html 2>/dev/null
+cp /var/www/html/firmware.tmpl /var/www/html/firmware.html
+sed -i 's/product_name_text/FS-HDR/g' /var/www/html/firmware.html 2>/dev/null
+
+chmod 777 /tmp/aja
+
+# ===============================================
+# Create fake NTV4 device nodes
+# ===============================================
+mknod /dev/ntv4video0 c 240 0 2>/dev/null
+mknod /dev/ntv4debugshare c 241 0 2>/dev/null
+chmod 666 /dev/ntv4video0 /dev/ntv4debugshare 2>/dev/null
+mkdir -p /sys/ntv4 2>/dev/null
+
+# ===============================================
+# Start configd with -d flag (no daemonize / debug mode)
+# ===============================================
+echo ""
+echo "[init] Starting configd -d (debug/no-daemon mode)..."
+/usr/local/bin/configd -d > /tmp/configd.log 2>&1 &
+CONFIGD_PID=$!
+echo "[init] configd PID=$CONFIGD_PID"
+
+# Wait for configd to respond (up to 60s) — test via config_cli
+echo "[init] Waiting for configd..."
+CONFIGD_READY=0
+for _try in $(seq 1 60); do
+    RESULT=$(config_cli -get eParamID_ProductID 2>/dev/null)
+    if [ -n "$RESULT" ]; then
+        CONFIGD_READY=1
+        echo "[init] *** configd ready (${_try}s) ***"
+        break
+    fi
+    sleep 1
+done
+
+if [ "$CONFIGD_READY" = "0" ]; then
+    echo "[init] configd not responding after 60s"
+    echo "[init] configd.log (last 20 lines):"
+    tail -20 /tmp/configd.log 2>/dev/null
+fi
+
+# ===============================================
+# Always start webd and input_sim (both have retry logic)
+# ===============================================
+echo "[init] Starting webd -d..."
+/usr/local/bin/webd -d > /tmp/webd.log 2>&1 &
+WEBD_PID=$!
+
+# Start input_sim — set initial formats, then run watch daemon
+if [ -x /usr/local/bin/input_sim ]; then
+    echo "[init] Setting initial SDI formats..."
+    /usr/local/bin/input_sim -f 20 -s 0x0F -r 0 -R 20 > /tmp/input_sim.log 2>&1
+    /usr/local/bin/input_sim -f 98 -s 0xF0 >> /tmp/input_sim.log 2>&1
+    echo "[init] Starting input_sim watch daemon..."
+    /usr/local/bin/input_sim -w >> /tmp/input_sim.log 2>&1 &
+    INPUT_SIM_PID=$!
+fi
+
+sleep 8
+
+WEBD_ALIVE=$(pidof webd 2>/dev/null)
+if [ -n "$WEBD_ALIVE" ]; then
+    echo "[init] *** webd is RUNNING (PID $WEBD_ALIVE) ***"
+else
+    echo "[init] webd not running yet"
+    echo "[init] webd.log (last 10 lines):"
+    tail -10 /tmp/webd.log 2>/dev/null
+fi
+
+if [ -n "$INPUT_SIM_PID" ] && kill -0 $INPUT_SIM_PID 2>/dev/null; then
+    echo "[init] *** input_sim is RUNNING (PID $INPUT_SIM_PID) ***"
+else
+    echo "[init] input_sim finished"
+fi
+
+# Busybox httpd fallback (only on 8080, webd uses 80)
+httpd -p 8080 -h /var/www/html 2>/dev/null &
+
+echo ""
+echo "=========================================="
+echo " FS-HDR Web UI:"
+echo "   http://localhost:19080/"
+echo ""
+echo " Input Simulator commands (from guest shell):"
+echo "   input_sim -f 20          # All SDIs = 1080i5994"
+echo "   input_sim -f 33 -s 0x03  # SDI 1-2 = 1080p5994"
+echo "   input_sim -f 56          # All SDIs = UHD2160p2398"
+echo "   input_sim -f 98          # Clear all (No Input)"
+echo "   input_sim -r 0 -R 33     # Ref BNC = 1080p5994"
+echo "   input_sim -r 1           # Switch to Free Run"
+echo "   input_sim -c             # Cycle through formats"
+echo "   input_sim -l             # List all formats + ref sources"
+echo "=========================================="
+echo ""
+
+exec /bin/sh

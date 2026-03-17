@@ -50,3 +50,6 @@ build/
 cobalt-name-editor/dist/
 k-frame-quartz-bridge/dist/
 cobalt-name-editor/download/
+
+# Allow fs-emu binary assets
+!fs-emu/assets/stub_ntv4.so

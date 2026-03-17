@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+{% block content %}
+
+<!-- Status Panel -->
+<section class="panel" id="panel-status">
+    <h2>Status</h2>
+    <div class="status-row">
+        <div class="status-info">
+            <span class="label">State:</span>
+            <span id="state-text">{{ config.get('last_firmware', 'No firmware loaded') }}</span>
+        </div>
+        <div class="status-info">
+            <span class="label">Firmware:</span>
+            <span id="firmware-text">{{ config.get('last_firmware', 'None') }}</span>
+        </div>
+        <div class="status-info">
+            <span class="label">Uptime:</span>
+            <span id="uptime-text">-</span>
+        </div>
+        <div class="status-info">
+            <span class="label">Device:</span>
+            <span id="device-type-text">{{ device_name or '-' }}</span>
+        </div>
+        <div class="status-info" id="device-link-wrapper" {% if not has_firmware %}style="display:none"{% endif %}>
+            <a id="device-link" href="http://localhost:{{ config.web_port }}/" target="_blank" class="btn btn-link">
+                Open {{ device_name or 'Device' }} Web UI
+            </a>
+        </div>
+    </div>
+</section>
+
+<!-- Firmware Panel -->
+<section class="panel" id="panel-firmware">
+    <h2>Firmware</h2>
+    <div class="form-row">
+        <form id="upload-form" enctype="multipart/form-data">
+            <input type="file" id="firmware-file" name="file" accept=".bin">
+            <button type="submit" class="btn">Upload &amp; Process</button>
+        </form>
+        <div id="upload-status"></div>
+    </div>
+    <div id="firmware-list"></div>
+</section>
+
+<!-- Emulator Controls -->
+<section class="panel" id="panel-controls">
+    <h2>Emulator Controls</h2>
+    <div class="form-row">
+        <button id="btn-start" class="btn btn-green" onclick="startEmulator()">Start</button>
+        <button id="btn-stop" class="btn btn-red" onclick="stopEmulator()" disabled>Stop</button>
+        <button id="btn-restart" class="btn btn-yellow" onclick="restartEmulator()" disabled>Restart</button>
+    </div>
+    <div class="form-row">
+        <div class="field">
+            <label for="web-port">Device Web Port:</label>
+            <input type="number" id="web-port" value="{{ config.web_port }}" min="1024" max="65535">
+        </div>
+        <button class="btn" onclick="saveConfig()">Save Port</button>
+    </div>
+</section>
+
+{% if has_firmware %}
+<!-- Configuration Storage -->
+<section class="panel" id="panel-flash">
+    <h2>Configuration Storage</h2>
+    <div class="status-row">
+        <div class="status-info">
+            <span class="label">Saved State:</span>
+            <span id="flash-status-text">Checking...</span>
+        </div>
+    </div>
+    <div class="form-row">
+        <button id="btn-flash-save" class="btn btn-green" onclick="saveFlash()" disabled>Save Configuration</button>
+        <button id="btn-flash-reset" class="btn btn-red" onclick="resetFlash()">Factory Reset</button>
+        <span id="flash-action-status"></span>
+    </div>
+    <div style="color:#8899bb;font-size:12px;margin-top:6px">
+        Saved configuration is automatically restored on next boot.
+        Factory Reset clears saved data — next boot starts fresh.
+    </div>
+</section>
+
+<!-- Input Channels -->
+<section class="panel" id="panel-sdi">
+    <h2>{{ input_label }} Inputs</h2>
+    <div class="form-row">
+        <div class="field">
+            <label for="sdi-all">Set All:</label>
+            <select id="sdi-all">
+                <option value="">--</option>
+                {% for val, name in sdi_formats.items() %}
+                <option value="{{ val }}">{{ name }}</option>
+                {% endfor %}
+            </select>
+            <button class="btn" onclick="setAllSdi()">Apply All</button>
+        </div>
+    </div>
+    <div class="sdi-grid">
+        {% for i in range(1, input_count + 1) %}
+        <div class="field">
+            <label for="sdi-{{ i }}">{{ input_label }} {{ i }}:</label>
+            <select id="sdi-{{ i }}">
+                {% for val, name in sdi_formats.items() %}
+                <option value="{{ val }}" {% if val == config.sdi_formats[i-1] %}selected{% endif %}>{{ name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        {% endfor %}
+    </div>
+    <div class="form-row">
+        <button class="btn btn-green" onclick="applySdi()">Apply Formats</button>
+        <span id="sdi-status"></span>
+    </div>
+</section>
+
+<!-- Reference/Genlock -->
+<section class="panel" id="panel-ref">
+    <h2>Reference / Genlock</h2>
+    <div class="status-row">
+        <div class="status-info">
+            <span class="label">Genlock Source:</span>
+            <span id="ref-source-text">-</span>
+        </div>
+    </div>
+    <div id="ref-bnc-controls" style="display:none">
+        <div class="form-row">
+            <div class="field">
+                <label for="ref-format">Simulated BNC Signal:</label>
+                <select id="ref-format">
+                    {% for val, name in ref_formats.items() %}
+                    <option value="{{ val }}" {% if val == config.ref_format %}selected{% endif %}>{{ name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button class="btn btn-green" onclick="applyRef()">Apply</button>
+            <span id="ref-status"></span>
+        </div>
+    </div>
+    <div id="ref-no-bnc-msg" style="display:none;color:#8899bb;font-size:12px;margin-top:6px">
+        Reference format is determined by the selected source. Change genlock source in the device web UI.
+    </div>
+</section>
+{% endif %}
+
+<!-- Boot Log -->
+<section class="panel" id="panel-log">
+    <h2>
+        Boot Log
+        <button class="btn btn-small" onclick="toggleLog()">Show/Hide</button>
+    </h2>
+    <pre id="boot-log" class="log-viewer" style="display:none;"></pre>
+</section>
+
+{% endblock %}

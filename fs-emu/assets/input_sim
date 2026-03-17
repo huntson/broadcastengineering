@@ -1,0 +1,260 @@
+#!/bin/sh
+# input_sim - AJA FS Input Simulator
+# Uses config_cli to set detected input format parameters.
+#
+# Environment variables (set by init script):
+#   SDI_PARAM_LIST    - space-separated list of param IDs for input channels
+#                       (default: 8 SDI params for FS-HDR)
+#   VID_CHANNELS      - vid channel numbers to manage (default: "0 1 2 3 4")
+#   DERIVE_VID_FROM_SDI - "1" to sync Vid from SDI assignments, "0" to skip
+#                         (FS2 sets Vid params directly, no derivation needed)
+
+DEFAULT_SDI_PARAMS="eParamID_SDI1DetectedInputFormat eParamID_SDI2DetectedInputFormat eParamID_SDI3DetectedInputFormat eParamID_SDI4DetectedInputFormat eParamID_SDI5DetectedInputFormat eParamID_SDI6DetectedInputFormat eParamID_SDI7DetectedInputFormat eParamID_SDI8DetectedInputFormat"
+SDI_PARAMS="${SDI_PARAM_LIST:-$DEFAULT_SDI_PARAMS}"
+
+FORMAT_VAL=""
+SDI_MASK=255
+CYCLE_MODE=0
+LIST_MODE=0
+REFRESH_MODE=0
+WATCH_MODE=0
+REF_SOURCE=""
+REF_FORMAT=""
+
+print_format_name() {
+    case "$1" in
+        3) echo "525i5994" ;;
+        7) echo "625i50" ;;
+        17) echo "720p5994" ;;
+        18) echo "720p60" ;;
+        19) echo "1080i50" ;;
+        20) echo "1080i5994" ;;
+        21) echo "1080i60" ;;
+        27) echo "1080p2398" ;;
+        29) echo "1080p25" ;;
+        30) echo "1080p2997" ;;
+        31) echo "1080p30" ;;
+        32) echo "1080p50" ;;
+        33) echo "1080p5994" ;;
+        34) echo "1080p60" ;;
+        56) echo "UHD2160p2398" ;;
+        59) echo "UHD2160p2997" ;;
+        62) echo "UHD2160p5994" ;;
+        63) echo "UHD2160p60" ;;
+        98) echo "No Input" ;;
+        *) echo "Unknown" ;;
+    esac
+}
+
+print_ref_source_name() {
+    case "$1" in
+        0) echo "Reference BNC" ;;
+        1) echo "Free Run" ;;
+        2) echo "SDI 1" ;;
+        3) echo "SDI 2" ;;
+        4) echo "SDI 3" ;;
+        5) echo "SDI 4" ;;
+        6) echo "SDI 5" ;;
+        7) echo "SDI 6" ;;
+        8) echo "SDI 7" ;;
+        9) echo "SDI 8" ;;
+        *) echo "Unknown" ;;
+    esac
+}
+
+print_usage() {
+    echo "Usage: $0 [options]"
+    echo ""
+    echo "  SDI Input Simulation:"
+    echo "  -f <format>   Video format value (default: 20 = 1080i5994)"
+    echo "  -s <mask>     SDI channel bitmask (default: 0xFF = all)"
+    echo ""
+    echo "  Reference/Genlock Simulation:"
+    echo "  -r <source>   Reference source (0=Ref BNC, 1=Free Run, 2-9=SDI1-8)"
+    echo "  -R <format>   Detected reference format (same codes as -f)"
+    echo ""
+    echo "  Sync:"
+    echo "  -u            Refresh Vid formats from current VideoInput assignments"
+    echo "  -w            Watch mode: continuously sync Vid formats (daemon)"
+    echo ""
+    echo "  General:"
+    echo "  -c            Cycle through formats every 10 seconds"
+    echo "  -l            List available formats and ref sources"
+    echo "  -h            Show this help"
+    echo ""
+    echo "Examples:"
+    echo "  $0 -f 20          # All SDIs show 1080i5994"
+    echo "  $0 -f 33 -s 0x03  # SDI 1-2 show 1080p5994"
+    echo "  $0 -r 0 -R 20     # Ref BNC input showing 1080i5994"
+    echo "  $0 -r 1           # Switch to Free Run (no ref)"
+    echo "  $0 -r 2           # Reference from SDI 1"
+    echo "  $0 -c             # Cycle through formats"
+    echo "  $0 -f 98          # Clear all inputs (No Input)"
+}
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -f) FORMAT_VAL="$2"; shift 2 ;;
+        -s) SDI_MASK=$(printf '%d' "$2"); shift 2 ;;
+        -r) REF_SOURCE="$2"; shift 2 ;;
+        -R) REF_FORMAT="$2"; shift 2 ;;
+        -u) REFRESH_MODE=1; shift ;;
+        -w) WATCH_MODE=1; shift ;;
+        -c) CYCLE_MODE=1; shift ;;
+        -l) LIST_MODE=1; shift ;;
+        -h|--help) print_usage; exit 0 ;;
+        *) echo "Unknown option: $1"; print_usage; exit 1 ;;
+    esac
+done
+
+if [ "$LIST_MODE" = "1" ]; then
+    echo "Available video formats:"
+    for v in 3 7 17 18 19 20 21 27 29 30 31 32 33 34 56 59 62 63 98; do
+        printf "  %3d = %s\n" "$v" "$(print_format_name $v)"
+    done
+    echo ""
+    echo "Reference sources (-r):"
+    for v in 0 1 2 3 4 5 6 7 8 9; do
+        printf "  %3d = %s\n" "$v" "$(print_ref_source_name $v)"
+    done
+    exit 0
+fi
+
+set_reference() {
+    src="$1"
+    fmt="$2"
+    config_cli --set eParamID_GenlockSource "$src" 2>/dev/null
+    printf "  Genlock Source -> %s\n" "$(print_ref_source_name $src)"
+    if [ -n "$fmt" ]; then
+        config_cli --set eParamID_DetectedReferenceFormat "$fmt" 2>/dev/null
+        printf "  Detected Ref Format -> %s\n" "$(print_format_name $fmt)"
+    fi
+}
+
+vid_input_to_sdi() {
+    # Map eParamID_VidNVideoInput enum value to primary SDI number (1-8).
+    # For dual/quad-link, returns the first SDI in the group.
+    case "$1" in
+        0) echo 1 ;; 1) echo 2 ;; 2) echo 3 ;; 3) echo 4 ;;
+        4) echo 1 ;;   # SDI 1+2 Dual Link
+        5) echo 3 ;;   # SDI 3+4 Dual Link
+        6) echo 5 ;; 7) echo 6 ;; 8) echo 7 ;; 9) echo 8 ;;
+        10) echo 5 ;;  # SDI 5+6 Dual Link
+        11) echo 7 ;;  # SDI 7+8 Dual Link
+        12) echo 1 ;;  # SDI 1-4 Quad Link (4K)
+        13) echo 5 ;;  # SDI 5-8 Quad Link (4K)
+        *) echo "" ;;
+    esac
+}
+
+get_param_val() {
+    # Extract numeric value from config_cli -get output (ignores debug noise)
+    config_cli --get "$1" 2>/dev/null | grep -E '^[0-9]+$' | tail -1
+}
+
+set_sdi_format() {
+    fmt="$1"
+    i=0
+    for param in $SDI_PARAMS; do
+        bit=$((1 << i))
+        if [ $((SDI_MASK & bit)) -ne 0 ]; then
+            config_cli --set "$param" "$fmt" 2>/dev/null
+            printf "  Ch%d (%s) -> %s\n" $((i + 1)) "$param" "$(print_format_name $fmt)"
+        fi
+        i=$((i + 1))
+    done
+    # On FS-HDR/FS4, also update Vid formats from SDI→Vid assignments.
+    # On FS2, sdi_params already ARE Vid params so this is skipped.
+    if [ "${DERIVE_VID_FROM_SDI:-1}" = "1" ]; then
+        for vid in ${VID_CHANNELS:-0 1 2 3 4}; do
+            vid_input=$(get_param_val "eParamID_Vid${vid}VideoInput")
+            sdi=$(vid_input_to_sdi "$vid_input")
+            [ -z "$sdi" ] && continue
+            sdi_bit=$((1 << (sdi - 1)))
+            if [ $((SDI_MASK & sdi_bit)) -ne 0 ]; then
+                config_cli --set "eParamID_Vid${vid}DetectedInputFormat" "$fmt" 2>/dev/null
+                printf "  Vid%d (SDI%d) -> %s\n" "$vid" "$sdi" "$(print_format_name $fmt)"
+            fi
+        done
+    fi
+}
+
+refresh_vid_formats() {
+    # Re-derive each Vid's DetectedInputFormat from its current VideoInput
+    # assignment and the corresponding SDI's DetectedInputFormat.
+    # Only writes when the value actually changed.
+    for vid in ${VID_CHANNELS:-0 1 2 3 4}; do
+        vid_input=$(get_param_val "eParamID_Vid${vid}VideoInput")
+        sdi=$(vid_input_to_sdi "$vid_input")
+        [ -z "$sdi" ] && continue
+        sdi_fmt=$(get_param_val "eParamID_SDI${sdi}DetectedInputFormat")
+        [ -z "$sdi_fmt" ] && continue
+        vid_fmt=$(get_param_val "eParamID_Vid${vid}DetectedInputFormat")
+        if [ "$vid_fmt" != "$sdi_fmt" ]; then
+            config_cli --set "eParamID_Vid${vid}DetectedInputFormat" "$sdi_fmt" 2>/dev/null
+            printf "  Vid%d (SDI%d) -> %s\n" "$vid" "$sdi" "$(print_format_name $sdi_fmt)"
+        fi
+    done
+}
+
+# Quick check if configd is already responding; only loop if it isn't
+RESULT=$(config_cli --get eParamID_ProductID 2>/dev/null)
+if [ -z "$RESULT" ]; then
+    echo "[input_sim] Waiting for configd..."
+    RETRIES=0
+    while [ $RETRIES -lt 30 ]; do
+        RESULT=$(config_cli --get eParamID_ProductID 2>/dev/null)
+        if [ -n "$RESULT" ]; then
+            break
+        fi
+        RETRIES=$((RETRIES + 1))
+        sleep 1
+    done
+    if [ $RETRIES -ge 30 ]; then
+        echo "[input_sim] Failed to connect to configd after 30s"
+        exit 1
+    fi
+fi
+
+if [ "$WATCH_MODE" = "1" ]; then
+    if [ "${DERIVE_VID_FROM_SDI:-1}" = "0" ]; then
+        echo "[input_sim] Watch mode skipped (no SDI→Vid derivation on this device)"
+        exit 0
+    fi
+    echo "[input_sim] Watch mode - syncing Vid formats every 3s"
+    while true; do
+        refresh_vid_formats
+        sleep 3
+    done
+elif [ "$REFRESH_MODE" = "1" ]; then
+    if [ "${DERIVE_VID_FROM_SDI:-1}" = "0" ]; then
+        echo "[input_sim] Refresh skipped (no SDI→Vid derivation on this device)"
+        exit 0
+    fi
+    echo "[input_sim] Refreshing Vid formats"
+    refresh_vid_formats
+    echo "[input_sim] Done."
+elif [ "$CYCLE_MODE" = "1" ]; then
+    echo "[input_sim] Cycling mode - changing formats every 10s"
+    : ${FORMAT_VAL:=20}
+    while true; do
+        for fmt in 20 33 27 56 59 17 19 98; do
+            echo "[input_sim] Setting SDIs to $fmt ($(print_format_name $fmt))"
+            set_sdi_format "$fmt"
+            if [ -n "$REF_SOURCE" ]; then
+                set_reference "$REF_SOURCE" "$fmt"
+            fi
+            sleep 10
+        done
+    done
+else
+    if [ -n "$FORMAT_VAL" ]; then
+        echo "[input_sim] Setting SDI inputs (mask=$SDI_MASK) to $FORMAT_VAL ($(print_format_name $FORMAT_VAL))"
+        set_sdi_format "$FORMAT_VAL"
+    fi
+    if [ -n "$REF_SOURCE" ]; then
+        echo "[input_sim] Setting reference source..."
+        set_reference "$REF_SOURCE" "$REF_FORMAT"
+    fi
+    echo "[input_sim] Done."
+fi
