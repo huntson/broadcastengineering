@@ -24,6 +24,8 @@ a = Analysis(
         'nacl.exceptions',
         '_cffi_backend',
         'gui',
+        'http_logger',
+        'bug_report',
     ],
     hookspath=[],
     hooksconfig={},

@@ -8,6 +8,7 @@ import webbrowser
 from pathlib import Path
 import configparser
 from license import LicenseManager
+from bug_report import BugReportDialog
 
 
 class LogRedirector:
@@ -23,8 +24,10 @@ class LogRedirector:
         if not self.enabled:
             return
 
-        # Add to buffer
+        # Add to buffer (capped for memory)
         self.buffer.append(message)
+        if len(self.buffer) > 2500:
+            self.buffer = self.buffer[-2000:]
 
         # Update GUI (must be done in main thread)
         try:
@@ -52,10 +55,11 @@ class LogRedirector:
 class CobaltGUI:
     """Main GUI window for Cobalt Name Editor."""
 
-    def __init__(self, host, port, on_quit_callback=None):
+    def __init__(self, host, port, on_quit_callback=None, http_logger=None):
         self.host = host
         self.port = port
         self.on_quit_callback = on_quit_callback
+        self.http_logger = http_logger
         self.license_manager = None
 
         # Save original stdout/stderr
@@ -107,6 +111,8 @@ class CobaltGUI:
         # Help menu
         help_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="Help", menu=help_menu)
+        help_menu.add_command(label="Report Bug...", command=self._show_bug_report_dialog)
+        help_menu.add_separator()
         help_menu.add_command(label="License...", command=self._show_license_dialog)
         help_menu.add_separator()
         help_menu.add_command(label="About", command=self._show_about)
@@ -196,6 +202,11 @@ class CobaltGUI:
         url = f"http://{self.host}:{self.port}"
         webbrowser.open(url)
         self.update_status(f"Opened {url} in browser")
+
+    def _show_bug_report_dialog(self):
+        """Show the bug report dialog."""
+        dialog = BugReportDialog(self.root, self.log_redirector, self.http_logger)
+        dialog.show()
 
     def _show_license_dialog(self):
         """Show license management dialog."""

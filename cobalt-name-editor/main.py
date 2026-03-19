@@ -16,6 +16,7 @@ import argparse
 import threading
 from license import LicenseManager, LicenseStatus, storage as license_storage
 from gui import CobaltGUI
+import http_logger as http_logging
 
 
 # Load configuration
@@ -37,6 +38,9 @@ PORT = config.getint('server', 'port', fallback=5050)
 DEBUG = config.getboolean('server', 'debug', fallback=True)
 DOWNLOAD_TIMEOUT = config.getint('timeouts', 'download_timeout', fallback=10)
 UPLOAD_TIMEOUT = config.getint('timeouts', 'upload_timeout', fallback=30)
+
+# Install HTTP request/response logging for bug reports
+_http_logger = http_logging.install()
 
 app = Flask(__name__)
 
@@ -243,5 +247,5 @@ if __name__ == '__main__':
         flask_thread.start()
 
         # Create and run GUI
-        gui = CobaltGUI(HOST, PORT)
+        gui = CobaltGUI(HOST, PORT, http_logger=_http_logger)
         gui.run()
