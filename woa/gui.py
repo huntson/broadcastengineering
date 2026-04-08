@@ -13,16 +13,21 @@ from window_helpers import FloatingWindowMixin
 from license import LicenseManager, LicenseStatus, storage
 from dialogs.aux_window import AuxWindow
 from __version__ import __version__
+import theme
 
 class VisualOnAirGUI(FloatingWindowMixin):
     """Visual GUI for displaying on-air status with safe view switching"""
-    BOX_CONFIGS = [
-        ('pgm', 'PROGRAM', '#cc0000'),
-        ('me1', 'ME 1', '#0066cc'),
-        ('me2', 'ME 2', '#0066cc'),
-        ('me3', 'ME 3', '#0066cc'),
-        ('me4', 'ME 4', '#0066cc'),
-    ]
+
+    @staticmethod
+    def _box_configs():
+        t = theme.current()
+        return [
+            ('pgm', 'PROGRAM', t.tally_program),
+            ('me1', 'ME 1', t.tally_me_default),
+            ('me2', 'ME 2', t.tally_me_default),
+            ('me3', 'ME 3', t.tally_me_default),
+            ('me4', 'ME 4', t.tally_me_default),
+        ]
     def __init__(self, root):
         self.root = root
         self.client = None
@@ -61,9 +66,10 @@ class VisualOnAirGUI(FloatingWindowMixin):
         self.license_manager.ensure_dialog()
     def setup_gui(self):
         """Setup the GUI interface"""
+        t = theme.current()
         self.root.title("K-Frame Visual On-Air Monitor")
         self.root.geometry(f"{self.window_width}x{self._compute_window_height(1)}")
-        self.root.configure(bg='#2b2b2b')
+        self.root.configure(bg=t.bg_primary)
         self._apply_app_icon()
         # Fonts
         self.title_font = ('Arial', 14, 'bold')
@@ -71,36 +77,39 @@ class VisualOnAirGUI(FloatingWindowMixin):
         self.source_font = ('Arial', 12, 'bold')
         self.label_font = ('Arial', 8)
         # Top control frame
-        control_frame = tk.Frame(self.root, bg='#1e1e1e', height=68)
-        control_frame.pack(fill=tk.X, padx=2, pady=2)
-        control_frame.pack_propagate(False)
+        self.control_frame = tk.Frame(self.root, bg=t.bg_secondary, height=68)
+        self.control_frame.pack(fill=tk.X, padx=2, pady=2)
+        self.control_frame.pack_propagate(False)
+        control_frame = self.control_frame
         # BETA label in top right
-        beta_label = tk.Label(control_frame, text="BETA", bg='#1e1e1e', fg='#ff6600',
+        self.beta_label = tk.Label(control_frame, text="BETA", bg=t.bg_secondary, fg=t.fg_beta,
                              font=('Arial', 12, 'bold'))
-        beta_label.pack(side=tk.RIGHT, padx=10, pady=15)
+        self.beta_label.pack(side=tk.RIGHT, padx=10, pady=15)
         # IP entry
-        tk.Label(control_frame, text="K-Frame IP:", bg='#1e1e1e', fg='white',
-                font=self.label_font).pack(side=tk.LEFT, padx=(10, 4), pady=15)
+        self.ip_label = tk.Label(control_frame, text="K-Frame IP:", bg=t.bg_secondary, fg=t.fg_primary,
+                font=self.label_font)
+        self.ip_label.pack(side=tk.LEFT, padx=(10, 4), pady=15)
         self.ip_var = tk.StringVar(value="localhost")
         self.ip_entry = tk.Entry(control_frame, textvariable=self.ip_var, width=15,
-                                bg='#3c3c3c', fg='white', insertbackground='white')
+                                bg=t.bg_input, fg=t.fg_primary, insertbackground=t.cursor_insert)
         self.ip_entry.pack(side=tk.LEFT, padx=(4, 10), pady=10)
-        connect_container = tk.Frame(control_frame, bg='#1e1e1e')
-        connect_container.pack(side=tk.LEFT, padx=8, pady=(4, 8))
+        self.connect_container = tk.Frame(control_frame, bg=t.bg_secondary)
+        self.connect_container.pack(side=tk.LEFT, padx=8, pady=(4, 8))
+        connect_container = self.connect_container
         # Connect button
         self.connect_btn = tk.Button(connect_container, text="CONNECT", command=self.toggle_connection,
-                                    bg='#4CAF50', fg='white', font=self.label_font,
+                                    bg=t.status_ok, fg=t.fg_primary, font=self.label_font,
                                     padx=12, pady=4, width=10)
         self.connect_btn.pack(fill=tk.X)
         # Status indicator
-        self.status_label = tk.Label(connect_container, text="DISCONNECTED", bg='#1e1e1e',
-                                     fg='#ff5555', font=self.label_font, anchor='center')
+        self.status_label = tk.Label(connect_container, text="DISCONNECTED", bg=t.bg_secondary,
+                                     fg=t.status_error, font=self.label_font, anchor='center')
         self.status_label.pack(fill=tk.X, pady=(6, 0))
         # View selection handled via the menu; keep state only.
         self.view_var = tk.StringVar(value="1 Suite")
         self.view_selector = None
         # Suite selector (only shown in single suite mode)
-        self.suite_label = tk.Label(control_frame, text="Suite:", bg='#1e1e1e', fg='white',
+        self.suite_label = tk.Label(control_frame, text="Suite:", bg=t.bg_secondary, fg=t.fg_primary,
                                    font=self.label_font)
         self.suite_label.pack(side=tk.LEFT, padx=(20, 5), pady=15)
         self.suite_var = tk.StringVar(value="Suite1")
@@ -148,19 +157,20 @@ class VisualOnAirGUI(FloatingWindowMixin):
         self.engineering_checkbox = None
         self.settings_button = tk.Button(control_frame, text="Settings",
                                          command=self.open_settings_dialog,
-                                         bg='#3c3c3c', fg='white',
+                                         bg=t.bg_input, fg=t.fg_primary,
                                          font=self.label_font,
                                          padx=12, pady=5)
         self.settings_button.pack(side=tk.LEFT, padx=(10, 5), pady=15)
         self._show_suite_controls()
         self._build_menu_bar()
         # Main display frame
-        self.display_frame = tk.Frame(self.root, bg='#2b2b2b')
+        self.display_frame = tk.Frame(self.root, bg=t.bg_primary)
         self.display_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         # Create all layout frames (but only show one at a time)
         self.create_all_layouts()
         self.switch_to_view("1")  # Start with single suite view
         self._display_not_connected_state()
+        theme.on_theme_change(self._apply_theme)
     def open_license_window(self):
         """Open the license dialog."""
         if self.license_manager:
@@ -190,19 +200,70 @@ class VisualOnAirGUI(FloatingWindowMixin):
 
     def _on_license_status_changed(self, status: LicenseStatus) -> None:
         self.license_status = status
+        t = theme.current()
         if not status.ok:
             if self.client and self.client.connected:
                 self.disconnect()
             if getattr(self, 'status_label', None):
                 message = status.reason or "License required"
-                self.status_label.config(text=message, fg='#ff5555')
+                self.status_label.config(text=message, fg=t.status_error)
             if getattr(self, 'connect_btn', None) and self.connect_btn.cget('state') == 'normal':
-                self.connect_btn.config(bg='#777777')
+                self.connect_btn.config(bg=t.status_disabled)
         else:
             if getattr(self, 'connect_btn', None) and self.connect_btn.cget('state') == 'normal' and self.connect_btn.cget('text') == 'CONNECT':
-                self.connect_btn.config(bg='#4CAF50')
+                self.connect_btn.config(bg=t.status_ok)
             if (not self.client or not self.client.connected) and getattr(self, 'status_label', None):
-                self.status_label.config(text="DISCONNECTED", fg='#ff5555')
+                self.status_label.config(text="DISCONNECTED", fg=t.status_error)
+
+    def _apply_theme(self, t):
+        """Reconfigure all widgets when the theme changes at runtime."""
+        # Root and main frames
+        self.root.configure(bg=t.bg_primary)
+        self.control_frame.configure(bg=t.bg_secondary)
+        self.connect_container.configure(bg=t.bg_secondary)
+        self.display_frame.configure(bg=t.bg_primary)
+
+        # Control bar widgets
+        self.beta_label.configure(bg=t.bg_secondary, fg=t.fg_beta)
+        self.ip_label.configure(bg=t.bg_secondary, fg=t.fg_primary)
+        self.ip_entry.configure(bg=t.bg_input, fg=t.fg_primary, insertbackground=t.cursor_insert)
+        self.suite_label.configure(bg=t.bg_secondary, fg=t.fg_primary)
+        self.settings_button.configure(bg=t.bg_input, fg=t.fg_primary)
+        self.status_label.configure(bg=t.bg_secondary)
+        # Preserve semantic color of connect button based on current state
+        if self.connect_btn.cget('text') == 'CONNECT':
+            self.connect_btn.configure(bg=t.status_ok, fg=t.fg_primary)
+        else:
+            self.connect_btn.configure(bg=t.status_disconnect, fg=t.fg_primary)
+
+        # Layout frames
+        for layout in self.layouts.values():
+            layout.configure(bg=t.bg_primary)
+
+        # Boxes: update title bars, containers, and tally colors
+        for view_mode, boxes in self.boxes.items():
+            for key, box_data in boxes.items():
+                is_pgm = key.endswith('pgm')
+                new_bg = t.tally_program if is_pgm else t.tally_me_default
+                box_data['bg_color'] = new_bg
+                box_data['frame'].configure(bg=new_bg)
+                box_data['content_frame'].configure(bg=new_bg)
+                box_data['container'].configure(bg=t.bg_primary)
+                if 'title_frame' in box_data:
+                    box_data['title_frame'].configure(bg=t.bg_title_bar)
+                if 'title_label' in box_data:
+                    box_data['title_label'].configure(bg=t.bg_title_bar, fg=t.fg_primary)
+
+        # Close secondary windows so they reopen with new theme
+        for close_method in (self.close_aux_window, self.close_logical_window,
+                             self.close_engineering_window, self.close_outputs_window):
+            try:
+                close_method()
+            except Exception:
+                pass
+
+        # Re-render display
+        self.update_display()
 
     def _display_not_connected_state(self) -> None:
         """Show a centered NOT CONNECTED placeholder in every primary box."""
@@ -222,7 +283,7 @@ class VisualOnAirGUI(FloatingWindowMixin):
                 self._render_centered_message(
                     content_frame,
                     message,
-                    bg=box_data.get('bg_color', '#2b2b2b'),
+                    bg=box_data.get('bg_color', theme.current().bg_primary),
                     font=self.source_font,
                 )
                 box_data['current_content'] = message
@@ -239,7 +300,9 @@ class VisualOnAirGUI(FloatingWindowMixin):
         if self.engineering_window_content and self.engineering_window_content.winfo_exists():
             self.update_engineering_window(self._engineering_entries_data or [], False, connected)
 
-    def _render_centered_message(self, parent, message, *, bg, fg='white', pad_x=0, pad_y=0, font=None, margin=0):
+    def _render_centered_message(self, parent, message, *, bg, fg=None, pad_x=0, pad_y=0, font=None, margin=0):
+        if fg is None:
+            fg = theme.current().fg_primary
         container = tk.Frame(parent, bg=bg)
         container.pack(fill=tk.BOTH, expand=True, padx=pad_x, pady=pad_y)
         canvas = tk.Canvas(
@@ -314,25 +377,26 @@ class VisualOnAirGUI(FloatingWindowMixin):
         header_store: list | None = None,
         store_single_label: bool = False,
     ) -> tk.Frame:
+        t = theme.current()
         section_height = self.header_height + self.tile_height
-        section = tk.Frame(parent, bg='#2b2b2b', height=section_height)
+        section = tk.Frame(parent, bg=t.bg_primary, height=section_height)
         section.pack(fill=tk.X, expand=False, pady=(0, self.section_spacing), anchor='n')
         section.pack_propagate(False)
 
         header_label = tk.Label(
             section,
             text=header_text,
-            bg='#2b2b2b',
-            fg='white',
+            bg=t.bg_primary,
+            fg=t.fg_primary,
             font=self.header_font,
         )
         header_label.pack(pady=(0, 0))
 
-        boxes_frame = tk.Frame(section, bg='#2b2b2b', height=self.tile_height)
+        boxes_frame = tk.Frame(section, bg=t.bg_primary, height=self.tile_height)
         boxes_frame.pack(fill=tk.X, expand=False)
         boxes_frame.pack_propagate(False)
         containers = []
-        for suffix, title, bg_color in self.BOX_CONFIGS:
+        for suffix, title, bg_color in self._box_configs():
             key = f"{key_prefix}{suffix}"
             container = self.create_box(boxes_frame, key, title, bg_color, view_mode)
             containers.append(container)
@@ -347,16 +411,17 @@ class VisualOnAirGUI(FloatingWindowMixin):
 
     def create_all_layouts(self):
         """Create all layout frames upfront - safer than destroying/recreating"""
+        t = theme.current()
         self.layouts = {}
         self.boxes = {"1": {}, "2": {}, "4": {}}
         # Layout 1: Single Suite (5 boxes)
-        self.layouts["1"] = tk.Frame(self.display_frame, bg='#2b2b2b')
+        self.layouts["1"] = tk.Frame(self.display_frame, bg=t.bg_primary)
         self.create_single_suite_layout(self.layouts["1"], "1")
         # Layout 2: Two Suites (2x2 boxes)
-        self.layouts["2"] = tk.Frame(self.display_frame, bg='#2b2b2b')
+        self.layouts["2"] = tk.Frame(self.display_frame, bg=t.bg_primary)
         self.create_two_suite_layout(self.layouts["2"], "2")
         # Layout 4: Four Suites (4x1 boxes)
-        self.layouts["4"] = tk.Frame(self.display_frame, bg='#2b2b2b')
+        self.layouts["4"] = tk.Frame(self.display_frame, bg=t.bg_primary)
         self.create_four_suite_layout(self.layouts["4"], "4")
     def create_single_suite_layout(self, parent, view_mode):
         """Create layout for single suite view (5 boxes)"""
@@ -397,15 +462,16 @@ class VisualOnAirGUI(FloatingWindowMixin):
             )
     def create_box(self, parent, key, title, bg_color, view_mode, width=180):
         """Create a single display box that flexes with available width."""
-        container = tk.Frame(parent, bg='#2b2b2b', height=self.tile_height)
+        t = theme.current()
+        container = tk.Frame(parent, bg=t.bg_primary, height=self.tile_height)
         container.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5)
         container.pack_propagate(False)
         # Title bar
-        title_frame = tk.Frame(container, bg='#444444', height=self.tile_title_height)
+        title_frame = tk.Frame(container, bg=t.bg_title_bar, height=self.tile_title_height)
         title_frame.pack(fill=tk.X)
         title_frame.pack_propagate(False)
         title_label = tk.Label(title_frame, text=title,
-                              bg='#444444', fg='white', font=self.title_font)
+                              bg=t.bg_title_bar, fg=t.fg_primary, font=self.title_font)
         title_label.pack(pady=0)
         # Main content box
         body_height = max(1, self.tile_height - self.tile_title_height)
@@ -420,7 +486,9 @@ class VisualOnAirGUI(FloatingWindowMixin):
             'content_frame': content_frame,
             'frame': on_air_frame,
             'bg_color': bg_color,
-            'container': container
+            'container': container,
+            'title_frame': title_frame,
+            'title_label': title_label,
         }
         return container
 
@@ -637,19 +705,20 @@ class VisualOnAirGUI(FloatingWindowMixin):
                 self.logical_window.deiconify()
                 self.logical_window.lift()
             return
+        t = theme.current()
         window = tk.Toplevel(self.root)
         window.title("Logical Sources")
-        window.configure(bg='#1e1e1e')
+        window.configure(bg=t.bg_secondary)
         window.minsize(320, 240)
         window.geometry("572x560")
-        outer = tk.Frame(window, bg='#1e1e1e')
+        outer = tk.Frame(window, bg=t.bg_secondary)
         outer.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         outer.grid_rowconfigure(0, weight=0)
         outer.grid_rowconfigure(1, weight=1)
         outer.grid_columnconfigure(0, weight=1)
-        header = tk.Frame(outer, bg='#1e1e1e')
+        header = tk.Frame(outer, bg=t.bg_secondary)
         header.grid(row=0, column=0, columnspan=2, sticky='ew', pady=(0, 8))
-        tk.Label(header, text="Suite:", bg='#1e1e1e', fg='white', font=self.label_font).pack(side=tk.LEFT)
+        tk.Label(header, text="Suite:", bg=t.bg_secondary, fg=t.fg_primary, font=self.label_font).pack(side=tk.LEFT)
         self._logical_suite_selector = ttk.Combobox(
             header,
             textvariable=self._logical_suite_var,
@@ -659,12 +728,12 @@ class VisualOnAirGUI(FloatingWindowMixin):
         )
         self._logical_suite_selector.pack(side=tk.LEFT, padx=(6, 0))
         self._logical_suite_selector.bind('<<ComboboxSelected>>', self._on_logical_suite_change)
-        canvas = tk.Canvas(outer, bg='#1e1e1e', highlightthickness=0)
+        canvas = tk.Canvas(outer, bg=t.bg_secondary, highlightthickness=0)
         canvas.grid(row=1, column=0, sticky='nsew')
         scrollbar = tk.Scrollbar(outer, orient=tk.VERTICAL, command=canvas.yview)
         scrollbar.grid(row=1, column=1, sticky='ns')
         canvas.configure(yscrollcommand=scrollbar.set, takefocus=1)
-        content = tk.Frame(canvas, bg='#1e1e1e')
+        content = tk.Frame(canvas, bg=t.bg_secondary)
         self._logical_canvas_window_id = canvas.create_window((0, 0), window=content, anchor='nw')
         content.bind('<Configure>', lambda e, cv=canvas, wid=self._logical_canvas_window_id, cont=content: self._refresh_canvas_window_height(cv, wid, cont))
         self._enable_canvas_mousewheel(canvas, content)
@@ -743,7 +812,7 @@ class VisualOnAirGUI(FloatingWindowMixin):
             self._logical_render_state = state
             for widget in content.winfo_children():
                 widget.destroy()
-            self._render_centered_message(content, message, bg='#1e1e1e', pad_x=20, pad_y=40, margin=24)
+            self._render_centered_message(content, message, bg=theme.current().bg_secondary, pad_x=20, pad_y=40, margin=24)
             self._adjust_canvas_placeholder_bounds(self.logical_canvas, self._logical_canvas_window_id, window, True)
             self._refresh_canvas_window_height(canvas, self._logical_canvas_window_id, content)
             return
@@ -791,21 +860,22 @@ class VisualOnAirGUI(FloatingWindowMixin):
                 self.engineering_window.deiconify()
                 self.engineering_window.lift()
             return
+        t = theme.current()
         window = tk.Toplevel(self.root)
         window.title("Engineering Sources")
-        window.configure(bg='#1e1e1e')
+        window.configure(bg=t.bg_secondary)
         window.minsize(320, 240)
         window.geometry("572x560")
-        outer = tk.Frame(window, bg='#1e1e1e')
+        outer = tk.Frame(window, bg=t.bg_secondary)
         outer.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         outer.grid_rowconfigure(0, weight=1)
         outer.grid_columnconfigure(0, weight=1)
-        canvas = tk.Canvas(outer, bg='#1e1e1e', highlightthickness=0)
+        canvas = tk.Canvas(outer, bg=t.bg_secondary, highlightthickness=0)
         canvas.grid(row=0, column=0, sticky='nsew')
         scrollbar = tk.Scrollbar(outer, orient=tk.VERTICAL, command=canvas.yview)
         scrollbar.grid(row=0, column=1, sticky='ns')
         canvas.configure(yscrollcommand=scrollbar.set, takefocus=1)
-        content = tk.Frame(canvas, bg='#1e1e1e')
+        content = tk.Frame(canvas, bg=t.bg_secondary)
         self._engineering_canvas_window_id = canvas.create_window((0, 0), window=content, anchor='nw')
         content.bind('<Configure>', lambda e, cv=canvas, wid=self._engineering_canvas_window_id, cont=content: self._refresh_canvas_window_height(cv, wid, cont))
         self._enable_canvas_mousewheel(canvas, content)
@@ -883,7 +953,7 @@ class VisualOnAirGUI(FloatingWindowMixin):
             self._engineering_render_state = state
             for widget in content.winfo_children():
                 widget.destroy()
-            self._render_centered_message(content, message, bg='#1e1e1e', pad_x=20, pad_y=40, margin=24)
+            self._render_centered_message(content, message, bg=theme.current().bg_secondary, pad_x=20, pad_y=40, margin=24)
             self._adjust_canvas_placeholder_bounds(self.engineering_canvas, self._engineering_canvas_window_id, window, True)
             self._refresh_canvas_window_height(canvas, self._engineering_canvas_window_id, content)
             return
@@ -934,9 +1004,10 @@ class VisualOnAirGUI(FloatingWindowMixin):
         except (TypeError, ValueError):
             current_value = 48
         current_value = max(1, min(500, current_value))
+        t = theme.current()
         settings_window = tk.Toplevel(self.root)
         settings_window.title("Output Settings")
-        settings_window.configure(bg='#1e1e1e')
+        settings_window.configure(bg=t.bg_secondary)
         settings_window.resizable(False, False)
         settings_window.transient(self.root)
         settings_window.grab_set()
@@ -949,19 +1020,19 @@ class VisualOnAirGUI(FloatingWindowMixin):
         window_x = base_x + (base_width // 2) - (width // 2)
         window_y = base_y + 120
         settings_window.geometry(f"{width}x{height}+{window_x}+{window_y}")
-        container = tk.Frame(settings_window, bg='#1e1e1e')
+        container = tk.Frame(settings_window, bg=t.bg_secondary)
         container.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
         prompt_label = tk.Label(
             container,
             text="Maximum outputs to display (per suite):",
-            bg='#1e1e1e',
-            fg='white',
+            bg=t.bg_secondary,
+            fg=t.fg_primary,
             font=self.label_font,
             anchor='w',
             justify=tk.LEFT,
         )
         prompt_label.pack(anchor='w')
-        control_frame = tk.Frame(container, bg='#1e1e1e')
+        control_frame = tk.Frame(container, bg=t.bg_secondary)
         control_frame.pack(pady=12)
         value_var = tk.StringVar(value=str(current_value))
         def validate_value(new_value: str) -> bool:
@@ -976,9 +1047,9 @@ class VisualOnAirGUI(FloatingWindowMixin):
             textvariable=value_var,
             width=6,
             justify='center',
-            bg='#3c3c3c',
-            fg='white',
-            insertbackground='white',
+            bg=t.bg_input,
+            fg=t.fg_primary,
+            insertbackground=t.cursor_insert,
             font=self.source_font,
             validate='key',
             validatecommand=(validate_command, '%P'),
@@ -996,10 +1067,10 @@ class VisualOnAirGUI(FloatingWindowMixin):
             text='\u25B2',
             command=lambda: adjust(1),
             width=3,
-            bg='#3c3c3c',
-            fg='white',
-            activebackground='#555555',
-            activeforeground='white',
+            bg=t.bg_input,
+            fg=t.fg_primary,
+            activebackground=t.bg_hover,
+            activeforeground=t.fg_primary,
             relief=tk.FLAT,
         )
         up_button.grid(row=0, column=1, sticky='nsew', pady=(0, 2))
@@ -1008,10 +1079,10 @@ class VisualOnAirGUI(FloatingWindowMixin):
             text='\u25BC',
             command=lambda: adjust(-1),
             width=3,
-            bg='#3c3c3c',
-            fg='white',
-            activebackground='#555555',
-            activeforeground='white',
+            bg=t.bg_input,
+            fg=t.fg_primary,
+            activebackground=t.bg_hover,
+            activeforeground=t.fg_primary,
             relief=tk.FLAT,
         )
         down_button.grid(row=1, column=1, sticky='nsew', pady=(2, 0))
@@ -1020,12 +1091,12 @@ class VisualOnAirGUI(FloatingWindowMixin):
         info_label = tk.Label(
             container,
             text="Allowed range: 1-500",
-            bg='#1e1e1e',
-            fg='#cccccc',
+            bg=t.bg_secondary,
+            fg=t.fg_secondary,
             font=self.label_font,
         )
         info_label.pack()
-        button_frame = tk.Frame(container, bg='#1e1e1e')
+        button_frame = tk.Frame(container, bg=t.bg_secondary)
         button_frame.pack(fill=tk.X, pady=(20, 0))
         def close_settings(event=None):
             window = self._settings_window
@@ -1065,10 +1136,10 @@ class VisualOnAirGUI(FloatingWindowMixin):
             button_frame,
             text='Cancel',
             command=close_settings,
-            bg='#3c3c3c',
-            fg='white',
-            activebackground='#555555',
-            activeforeground='white',
+            bg=t.bg_input,
+            fg=t.fg_primary,
+            activebackground=t.bg_hover,
+            activeforeground=t.fg_primary,
             relief=tk.FLAT,
             padx=18,
             pady=6,
@@ -1078,10 +1149,10 @@ class VisualOnAirGUI(FloatingWindowMixin):
             button_frame,
             text='Save',
             command=apply_settings,
-            bg='#4CAF50',
-            fg='white',
-            activebackground='#66bb6a',
-            activeforeground='white',
+            bg=t.status_ok,
+            fg=t.fg_primary,
+            activebackground=t.status_ok_hover,
+            activeforeground=t.fg_primary,
             relief=tk.FLAT,
             padx=18,
             pady=6,
@@ -1135,25 +1206,26 @@ class VisualOnAirGUI(FloatingWindowMixin):
                 self.outputs_window.lift()
             return
 
+        t = theme.current()
         window = tk.Toplevel(self.root)
         window.title("All Outputs")
-        window.configure(bg='#1e1e1e')
+        window.configure(bg=t.bg_secondary)
         window.minsize(360, 260)
         window.geometry("572x560")
 
-        outer = tk.Frame(window, bg='#1e1e1e')
+        outer = tk.Frame(window, bg=t.bg_secondary)
         outer.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         outer.grid_rowconfigure(0, weight=1)
         outer.grid_columnconfigure(0, weight=1)
 
-        canvas = tk.Canvas(outer, bg='#1e1e1e', highlightthickness=0)
+        canvas = tk.Canvas(outer, bg=t.bg_secondary, highlightthickness=0)
         canvas.grid(row=0, column=0, sticky='nsew')
 
         scrollbar = tk.Scrollbar(outer, orient=tk.VERTICAL, command=canvas.yview)
         scrollbar.grid(row=0, column=1, sticky='ns')
         canvas.configure(yscrollcommand=scrollbar.set, takefocus=1)
 
-        content = tk.Frame(canvas, bg='#1e1e1e')
+        content = tk.Frame(canvas, bg=t.bg_secondary)
         self._outputs_canvas_window_id = canvas.create_window((0, 0), window=content, anchor='nw')
         content.bind('<Configure>', lambda event: canvas.configure(scrollregion=canvas.bbox('all')))
         self._enable_canvas_mousewheel(canvas, content)
@@ -1251,14 +1323,14 @@ class VisualOnAirGUI(FloatingWindowMixin):
             content.grid_columnconfigure(col, weight=0)
 
         if entries is None:
-            self._render_centered_message(content, "Outputs display disabled.", bg='#1e1e1e', margin=24)
+            self._render_centered_message(content, "Outputs display disabled.", bg=theme.current().bg_secondary, margin=24)
             self._adjust_canvas_placeholder_bounds(self.outputs_canvas, self._outputs_canvas_window_id, window, True)
         elif not entries:
             if not self.client or not self.client.connected:
                 message = "NOT CONNECTED"
             else:
                 message = "No output data received yet."
-            self._render_centered_message(content, message, bg='#1e1e1e', margin=24)
+            self._render_centered_message(content, message, bg=theme.current().bg_secondary, margin=24)
             self._adjust_canvas_placeholder_bounds(self.outputs_canvas, self._outputs_canvas_window_id, window, True)
         else:
             self._adjust_canvas_placeholder_bounds(self.outputs_canvas, self._outputs_canvas_window_id, window, False)
@@ -1285,16 +1357,17 @@ class VisualOnAirGUI(FloatingWindowMixin):
             for idx, (_, suite_label, out_num, name, source_label) in enumerate(entries):
                 row = idx // columns
                 col = idx % columns
-                entry_frame = tk.Frame(content, bg='#1e1e1e', bd=1, relief=tk.FLAT)
+                t = theme.current()
+                entry_frame = tk.Frame(content, bg=t.bg_secondary, bd=1, relief=tk.FLAT)
                 entry_frame.grid(row=row, column=col, sticky='nsew', padx=6, pady=4)
 
                 header = f"{suite_label} - {name}"
-                header_label = tk.Label(entry_frame, text=header, bg='#1e1e1e', fg='#99ccff',
+                header_label = tk.Label(entry_frame, text=header, bg=t.bg_secondary, fg=t.fg_entry_header,
                                         font=self.label_font, anchor='w')
                 header_label.pack(fill=tk.X, padx=4, pady=(4, 0))
 
                 source_text = source_label or "No Source"
-                source_label_widget = tk.Label(entry_frame, text=source_text, bg='#1e1e1e', fg='white',
+                source_label_widget = tk.Label(entry_frame, text=source_text, bg=t.bg_secondary, fg=t.fg_primary,
                                                font=self.source_font, anchor='w', justify=tk.LEFT)
                 source_label_widget.pack(fill=tk.X, padx=4, pady=(0, 4))
 
@@ -1530,36 +1603,41 @@ class VisualOnAirGUI(FloatingWindowMixin):
             }
         return state
 
-    def _extract_me_key(self, value: str) -> Optional[int]:
-        """Extract ME number from content string. Returns ME number (1-4) or None."""
+    def _extract_all_me_keys(self, value: str) -> list:
+        """Extract all ME numbers from content string. Returns list of ME numbers (1-4)."""
         if not isinstance(value, str):
-            return None
+            return []
         import re
         normalized = value.upper()
-        # Match ME references anywhere in the string:
+        # Match all ME references in the string:
         # - "M1 A", "M2 B", "M3 A" etc. (K-Frame output format)
         # - "ME1", "ME2", "ME3" etc. (direct ME reference)
-        match = re.search(r'\bM(?:E)?(\d{1,2})\s+[A-Z]', normalized)
-        if match:
+        keys = []
+        for match in re.finditer(r'\bM(?:E)?(\d{1,2})\s+[A-Z]', normalized):
             me_num = int(match.group(1))
             if 1 <= me_num <= 4:
-                return me_num
-        return None
+                keys.append(me_num)
+        return keys
 
     def _resolve_cascade_chain(self, current_data: dict, start_key: str) -> set:
         """Resolve cascade chain. Returns set of ME numbers (1-4) that should be highlighted red."""
         result = set()
         visited = set()
-        current_content = current_data.get(start_key, '')
+        queue = [current_data.get(start_key, '')]
 
-        while current_content:
-            me_num = self._extract_me_key(current_content)
-            if not me_num or me_num in visited:
-                break
-            visited.add(me_num)
-            result.add(me_num)
-            # Follow the chain
-            current_content = current_data.get(f'ME{me_num}', '')
+        while queue:
+            current_content = queue.pop(0)
+            if not current_content:
+                continue
+            for me_num in self._extract_all_me_keys(current_content):
+                if me_num in visited:
+                    continue
+                visited.add(me_num)
+                result.add(me_num)
+                # Follow the chain
+                me_content = current_data.get(f'ME{me_num}', '')
+                if me_content:
+                    queue.append(me_content)
 
         return result
 
@@ -1569,6 +1647,7 @@ class VisualOnAirGUI(FloatingWindowMixin):
             return
         source_names = state.get('source_names', {})
         current_on_air = state.get('current_on_air', {})
+        t = theme.current()
 
         view_mode = self.view_mode
         if view_mode == "1":
@@ -1583,13 +1662,13 @@ class VisualOnAirGUI(FloatingWindowMixin):
             cascade_mes = self._resolve_cascade_chain(current_data, 'PGM')
             if 'pgm' in self.boxes[view_mode]:
                 box_data = self.boxes[view_mode]['pgm']
-                self.update_content_frame(box_data['content_frame'], current_data.get('PGM', ''), '#cc0000', box_data)
+                self.update_content_frame(box_data['content_frame'], current_data.get('PGM', ''), t.tally_program, box_data)
             for me_num in range(1, 5):
                 key = f'me{me_num}'
                 if key in self.boxes[view_mode]:
                     box_data = self.boxes[view_mode][key]
                     # Color red if this ME is in the cascade chain, otherwise blue
-                    color = '#cc0000' if me_num in cascade_mes else '#0066cc'
+                    color = t.tally_program if me_num in cascade_mes else t.tally_me_default
                     self.update_content_frame(box_data['content_frame'], current_data.get(f'ME{me_num}', ''), color, box_data)
         elif view_mode == "2":
             base_suite = 2 if self.suite_var.get() == "Suite3-4" else 0
@@ -1602,13 +1681,13 @@ class VisualOnAirGUI(FloatingWindowMixin):
                 key = f's{offset}_pgm'
                 if key in self.boxes[view_mode]:
                     box_data = self.boxes[view_mode][key]
-                    self.update_content_frame(box_data['content_frame'], current_data.get('PGM', ''), '#cc0000', box_data)
+                    self.update_content_frame(box_data['content_frame'], current_data.get('PGM', ''), t.tally_program, box_data)
                 for me_num in range(1, 5):
                     key = f's{offset}_me{me_num}'
                     if key in self.boxes[view_mode]:
                         box_data = self.boxes[view_mode][key]
                         # Color red if this ME is in the cascade chain, otherwise blue
-                        color = '#cc0000' if me_num in cascade_mes else '#0066cc'
+                        color = t.tally_program if me_num in cascade_mes else t.tally_me_default
                         self.update_content_frame(box_data['content_frame'], current_data.get(f'ME{me_num}', ''), color, box_data)
         else:
             self._update_multi_suite_headers()
@@ -1619,13 +1698,13 @@ class VisualOnAirGUI(FloatingWindowMixin):
                 key = f's{suite_idx}_pgm'
                 if key in self.boxes[view_mode]:
                     box_data = self.boxes[view_mode][key]
-                    self.update_content_frame(box_data['content_frame'], current_data.get('PGM', ''), '#cc0000', box_data)
+                    self.update_content_frame(box_data['content_frame'], current_data.get('PGM', ''), t.tally_program, box_data)
                 for me_num in range(1, 5):
                     key = f's{suite_idx}_me{me_num}'
                     if key in self.boxes[view_mode]:
                         box_data = self.boxes[view_mode][key]
                         # Color red if this ME is in the cascade chain, otherwise blue
-                        color = '#cc0000' if me_num in cascade_mes else '#0066cc'
+                        color = t.tally_program if me_num in cascade_mes else t.tally_me_default
                         self.update_content_frame(box_data['content_frame'], current_data.get(f'ME{me_num}', ''), color, box_data)
 
         suites_for_view = self._resolve_view_suites()
@@ -1700,7 +1779,7 @@ class VisualOnAirGUI(FloatingWindowMixin):
             return
         self.ip_var.set(ip)
         self._persist_app_settings()
-        self.status_label.config(text="CONNECTING...", fg='yellow')
+        self.status_label.config(text="CONNECTING...", fg=theme.current().status_connecting)
         self.connect_btn.config(state="disabled")
         threading.Thread(target=self._connect_worker, args=(ip,), daemon=True).start()
     def _connect_worker(self, ip):
@@ -1713,12 +1792,13 @@ class VisualOnAirGUI(FloatingWindowMixin):
             self.root.after(0, self._on_connect_failed)
     def _on_connected(self):
         """Called when connection succeeds"""
-        self.status_label.config(text="CONNECTED", fg='#4CAF50')
-        self.connect_btn.config(text="DISCONNECT", bg='#f44336', state="normal")
+        t = theme.current()
+        self.status_label.config(text="CONNECTED", fg=t.status_ok)
+        self.connect_btn.config(text="DISCONNECT", bg=t.status_disconnect, state="normal")
         self.ip_entry.config(state="disabled")
     def _on_connect_failed(self):
         """Called when connection fails"""
-        self.status_label.config(text="CONNECTION FAILED", fg='#ff5555')
+        self.status_label.config(text="CONNECTION FAILED", fg=theme.current().status_error)
         self.connect_btn.config(state="normal")
         self._display_not_connected_state()
     def disconnect(self):
@@ -1736,8 +1816,9 @@ class VisualOnAirGUI(FloatingWindowMixin):
             except Exception:
                 pass
             self.client = None
-        self.status_label.config(text="DISCONNECTED", fg='#ff5555')
-        self.connect_btn.config(text="CONNECT", bg='#4CAF50', state="normal")
+        t = theme.current()
+        self.status_label.config(text="DISCONNECTED", fg=t.status_error)
+        self.connect_btn.config(text="CONNECT", bg=t.status_ok, state="normal")
         self.ip_entry.config(state="normal")
         self.update_display()
     def on_suite_change(self, event=None):
@@ -1766,18 +1847,19 @@ class VisualOnAirGUI(FloatingWindowMixin):
                 box_data['original_highlightbackground'] = box_frame.cget('highlightbackground')
 
             # Apply yellow flash
+            t = theme.current()
             box_frame.config(
                 highlightthickness=4,
-                highlightbackground='#FFD666',
-                highlightcolor='#FFD666'
+                highlightbackground=t.flash_highlight,
+                highlightcolor=t.flash_highlight
             )
 
             # Schedule removal of flash after 2.5 seconds
             def remove_flash():
                 box_frame.config(
                     highlightthickness=box_data.get('original_highlightthickness', 2),
-                    highlightbackground=box_data.get('original_highlightbackground', 'white'),
-                    highlightcolor=box_data.get('original_highlightbackground', 'white')
+                    highlightbackground=box_data.get('original_highlightbackground', theme.current().fg_primary),
+                    highlightcolor=box_data.get('original_highlightbackground', theme.current().fg_primary)
                 )
                 box_data['flash_timer'] = None
 
@@ -1810,6 +1892,7 @@ class VisualOnAirGUI(FloatingWindowMixin):
             self._render_centered_message(content_frame, content, bg=bg_color, font=self.source_font)
             return
         # For layer content, create a centered container
+        t = theme.current()
         lines = content.split('\n')
         # Create a container frame that will be centered
         line_container = tk.Frame(content_frame, bg=bg_color)
@@ -1818,7 +1901,7 @@ class VisualOnAirGUI(FloatingWindowMixin):
             if line == "─────────────":
                 # Separator line
                 sep_label = tk.Label(line_container, text=line,
-                                    bg=bg_color, fg='white',
+                                    bg=bg_color, fg=t.fg_primary,
                                     font=self.source_font, justify=tk.CENTER)
                 sep_label.pack()
             elif ':' in line:
@@ -1828,21 +1911,21 @@ class VisualOnAirGUI(FloatingWindowMixin):
                 parts = line.split(':', 1)
                 label_part = parts[0] + ':'
                 source_part = parts[1] if len(parts) > 1 else ''
-                # Layer name label (black text)
+                # Layer name label
                 layer_label = tk.Label(line_frame, text=label_part,
-                                      bg=bg_color, fg='black',
+                                      bg=bg_color, fg=t.fg_on_tally,
                                       font=self.source_font)
                 layer_label.pack(side=tk.LEFT)
-                # Source name label (white text)
+                # Source name label
                 if source_part:
                     source_label = tk.Label(line_frame, text=source_part,
-                                          bg=bg_color, fg='white',
+                                          bg=bg_color, fg=t.fg_primary,
                                           font=self.source_font)
                     source_label.pack(side=tk.LEFT)
             else:
                 # Other content
                 other_label = tk.Label(line_container, text=line,
-                                     bg=bg_color, fg='white',
+                                     bg=bg_color, fg=t.fg_primary,
                                      font=self.source_font, justify=tk.CENTER)
                 other_label.pack()
     def _request_suite_data(self):
