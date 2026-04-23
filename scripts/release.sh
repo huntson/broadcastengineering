@@ -79,10 +79,16 @@ fi
 BUMP="none"  # none < patch < minor < major
 
 escalate() {
+  # Explicit `if` statements instead of `test && assign` because under
+  # `set -e` a false test on the left of a short-circuit that happens to
+  # be the last statement in its chain propagates as a non-zero exit
+  # status, which set -e then treats as script failure. Triggers on the
+  # second fix: commit in a row (patch→patch), any non-major→minor that
+  # was already major, etc.
   case "$1" in
     major) BUMP="major" ;;
-    minor) [ "$BUMP" != "major" ] && BUMP="minor" ;;
-    patch) [ "$BUMP" = "none" ] && BUMP="patch" ;;
+    minor) if [ "$BUMP" != "major" ]; then BUMP="minor"; fi ;;
+    patch) if [ "$BUMP" = "none"  ]; then BUMP="patch"; fi ;;
   esac
 }
 
