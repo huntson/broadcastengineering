@@ -91,7 +91,10 @@ while IFS= read -r sha; do
     stripped="$subject"
   fi
 
-  if [[ "$stripped" =~ ^([a-z]+)(\([^)]+\))?(!?)\: ]]; then
+  # Regex held in a variable for bash 3.2 compat — 3.2's [[ =~ ]] parser
+  # chokes on inline patterns that contain optional grouped parens.
+  _re_conv='^([a-z]+)(\([^)]+\))?(!?):'
+  if [[ "$stripped" =~ $_re_conv ]]; then
     ctype="${BASH_REMATCH[1]}"
     bang="${BASH_REMATCH[3]}"
   else
