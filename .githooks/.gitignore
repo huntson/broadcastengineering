@@ -1,0 +1,5 @@
+# Ignore hooks auto-installed by tools (e.g. git-lfs).
+# We track only our own hooks here.
+*
+!.gitignore
+!commit-msg
