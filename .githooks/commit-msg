@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# Enforce Conventional Commits format so scripts/release.sh can classify
+# commits mechanically. See VERSIONING.md.
+
+set -euo pipefail
+
+MSG_FILE="$1"
+SUBJECT="$(sed -n '1p' "$MSG_FILE")"
+
+# Skip automatic commits.
+case "$SUBJECT" in
+  Merge\ *|Revert\ *|fixup!*|squash!*|amend!*) exit 0 ;;
+  '') exit 0 ;;
+esac
+
+# Accept either:
+#   <type>[(scope)][!]: <desc>
+#   <subproject>: <type>[(scope)][!]: <desc>
+TYPES='(feat|fix|perf|refactor|docs|chore|test|build|ci|style|revert)'
+RE_PLAIN="^${TYPES}(\([A-Za-z0-9_/.-]+\))?!?: .+"
+RE_PREFIXED="^[A-Za-z0-9_.-]+: ${TYPES}(\([A-Za-z0-9_/.-]+\))?!?: .+"
+
+if [[ "$SUBJECT" =~ $RE_PLAIN ]] || [[ "$SUBJECT" =~ $RE_PREFIXED ]]; then
+  exit 0
+fi
+
+cat >&2 <<EOF
+commit-msg: subject does not follow Conventional Commits format.
+
+  subject: $SUBJECT
+
+Expected one of:
+  <type>[(scope)][!]: <description>
+  <subproject>: <type>[(scope)][!]: <description>
+
+Valid types: feat fix perf refactor docs chore test build ci style revert
+Add ! (or BREAKING CHANGE: in body) for breaking changes.
+
+See VERSIONING.md for the full protocol.
+EOF
+exit 1
