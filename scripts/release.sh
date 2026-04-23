@@ -63,7 +63,14 @@ else
   RANGE="HEAD"
 fi
 
-SHAS="$(git log --format='%H' "$RANGE" "${LOG_PATH_ARGS[@]}" 2>/dev/null || true)"
+# Bash 3.2 under `set -u` raises "unbound variable" when expanding an
+# empty array with "${arr[@]}". Split the two modes explicitly so the
+# single-project case (empty LOG_PATH_ARGS) doesn't dereference it.
+if [ ${#LOG_PATH_ARGS[@]} -gt 0 ]; then
+  SHAS="$(git log --format='%H' "$RANGE" "${LOG_PATH_ARGS[@]}" 2>/dev/null || true)"
+else
+  SHAS="$(git log --format='%H' "$RANGE" 2>/dev/null || true)"
+fi
 
 if [ -z "$SHAS" ]; then
   exit 0
@@ -147,6 +154,24 @@ fi
 
 printf '%s\n' "$NEW_VERSION" > "$VERSION_FILE"
 git add -- "$VERSION_FILE"
+
+# Propagate VERSION into every nested service dir that has a Dockerfile.
+# For bundled subprojects (e.g. broadcastglue.com/ containing multiple
+# services), each Docker build context is one level below the subproject
+# root and can't see ../VERSION. Writing a copy next to each Dockerfile
+# lets the image bake in the release number via `COPY VERSION /app/VERSION`.
+# No-op for top-level subprojects where the Dockerfile is next to VERSION.
+if [ "$SCOPE" != "." ]; then
+  while IFS= read -r _dockerfile; do
+    [ -z "$_dockerfile" ] && continue
+    _svc_dir="$(dirname "$_dockerfile")"
+    if [ "$_svc_dir" != "$SCOPE" ]; then
+      cp "$VERSION_FILE" "$_svc_dir/VERSION"
+      git add -- "$_svc_dir/VERSION"
+    fi
+  done < <(find "$SCOPE" -name Dockerfile -type f 2>/dev/null)
+fi
+
 git commit -m "${COMMIT_SCOPE_LABEL}chore(release): v${NEW_VERSION}" --quiet
 git tag -a "${NEW_TAG}" -m "${SCOPE} v${NEW_VERSION}"
 
