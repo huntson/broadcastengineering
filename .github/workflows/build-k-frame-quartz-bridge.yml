@@ -1,15 +1,13 @@
 name: Build K-Frame Quartz Bridge
 
+# Tag-driven: release.sh creates and pushes k-frame-quartz-bridge/vX.Y.Z,
+# this workflow then builds the EXE and attaches it to that release.
+# See VERSIONING.md for the protocol.
+
 on:
   push:
-    branches: [ main ]
-    paths:
-      - 'k-frame-quartz-bridge/**'
-      - '.github/workflows/build-k-frame-quartz-bridge.yml'
-  pull_request:
-    branches: [ main ]
-    paths:
-      - 'k-frame-quartz-bridge/**'
+    tags:
+      - 'k-frame-quartz-bridge/v*'
   workflow_dispatch:
 
 jobs:
@@ -32,10 +30,23 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Update VERSION file
+      - name: Read VERSION from git
+        id: version
         working-directory: ./k-frame-quartz-bridge
+        shell: bash
         run: |
-          echo "1.0.${{ github.run_number }}" | Out-File -FilePath VERSION -Encoding utf8 -NoNewline
+          version=$(tr -d '[:space:]' < VERSION)
+          echo "version=$version" >> $GITHUB_OUTPUT
+
+      - name: Sanity check tag matches VERSION
+        shell: bash
+        run: |
+          tag_ref="${{ github.ref_name }}"
+          expected="k-frame-quartz-bridge/v${{ steps.version.outputs.version }}"
+          if [ "$tag_ref" != "$expected" ]; then
+            echo "tag ($tag_ref) does not match VERSION ($expected)" >&2
+            exit 1
+          fi
 
       - name: Build executable with PyInstaller
         working-directory: ./k-frame-quartz-bridge
@@ -53,58 +64,26 @@ jobs:
             exit 1
           }
 
-      - name: Upload Windows executable
+      - name: Upload Windows executable artifact
         uses: actions/upload-artifact@v4
         with:
           name: k-frame-quartz-bridge-windows
           path: k-frame-quartz-bridge/dist/k-frame-quartz-bridge.exe
           retention-days: 90
 
-      - name: Create Versioned Release
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      - name: Attach EXE to GitHub Release
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: k-frame-quartz-bridge-v1.0.${{ github.run_number }}
-          name: K-Frame Quartz Bridge v1.0.${{ github.run_number }}
+          name: K-Frame Quartz Bridge v${{ steps.version.outputs.version }}
           body: |
-            Automated build of K-Frame Quartz Bridge for Windows
+            Automated Windows build of K-Frame Quartz Bridge.
 
             ## Download
-            - Download `k-frame-quartz-bridge.exe` below
-            - Double-click to run (no installation needed)
-            - Access the status UI at http://localhost:4001
+            - Download `k-frame-quartz-bridge.exe` below.
+            - Double-click to run (no installation needed).
+            - Access the status UI at http://localhost:4001.
 
             Built from commit: ${{ github.sha }}
-          files: |
-            k-frame-quartz-bridge/dist/k-frame-quartz-bridge.exe
-          draft: false
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Update Latest Release
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: k-frame-quartz-bridge-latest
-          name: K-Frame Quartz Bridge - Latest Build
-          body: |
-            **Latest stable build of K-Frame Quartz Bridge**
-
-            This release is automatically updated with every commit to main.
-
-            ## Download
-            Click the asset below to download the latest version.
-
-            ## Usage
-            1. Download `k-frame-quartz-bridge.exe`
-            2. Double-click to run
-            3. Configure GV host and suite in Settings
-            4. Access the status UI at http://localhost:4001
-
-            ---
-            *Built from commit: ${{ github.sha }}*
-            *Version: v1.0.${{ github.run_number }}*
           files: |
             k-frame-quartz-bridge/dist/k-frame-quartz-bridge.exe
           draft: false
