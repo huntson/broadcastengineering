@@ -72,7 +72,7 @@ jobs:
         with:
           name: k-frame-quartz-bridge-windows
           path: k-frame-quartz-bridge/dist/k-frame-quartz-bridge.exe
-          retention-days: 90
+          retention-days: 7
 
       - name: Attach EXE to GitHub Release
         uses: softprops/action-gh-release@v1
