@@ -1,5 +1,0 @@
-__pycache__/
-*.pyc
-data/
-virtualbox/.build/
-virtualbox/*.iso

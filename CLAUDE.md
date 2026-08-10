@@ -2,9 +2,13 @@
 
 ## This repo
 
-**broadcastengineering** — a monorepo of 4 broadcast-engineering subprojects:
-`fs-emu`, `gv-surface-datetime-fix`, `k-frame status`, `k-frame-quartz-bridge`.
+**broadcastengineering** — a monorepo of 3 broadcast-engineering subprojects:
+`gv-surface-datetime-fix`, `k-frame status`, `k-frame-quartz-bridge`.
 Mix of scripts and Windows EXE apps.
+
+`fs-emu` used to live here. It moved to the `broadcastglue` monorepo when it
+became a licensed customer product; the `fs-emu/v0.2.0` tag remains as
+history. Work on it there, not here.
 
 **Mode:** monorepo. Each subproject has its own `VERSION` file and its own
 tag namespace (`<subproject>/vX.Y.Z`). Note `k-frame status` has a space
