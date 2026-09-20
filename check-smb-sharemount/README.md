@@ -1,4 +1,4 @@
-# Check-ShareMount
+# Check-SmbShareMount
 
 Plain-language diagnostic for "why can't this PC open that shared folder?" (SMB / network drives), plus one-click fixes for the common causes.
 
@@ -13,15 +13,15 @@ Runs on the PC that has the problem, Windows 7 through 11 (PowerShell 2.0 and up
 
 ## Run it
 
-Right-click `Check-ShareMount.ps1` and choose **Run with PowerShell** (opens the window), or:
+Right-click `Check-SmbShareMount.ps1` and choose **Run with PowerShell** (opens the window), or:
 
 ```
-powershell -ExecutionPolicy Bypass -File Check-ShareMount.ps1                       # window
-powershell -ExecutionPolicy Bypass -File Check-ShareMount.ps1 -Target \\SERVER\Share -WriteTest   # text
-powershell -ExecutionPolicy Bypass -File Check-ShareMount.ps1 -Settings             # dump every SMB setting
+powershell -ExecutionPolicy Bypass -File Check-SmbShareMount.ps1                          # window
+powershell -ExecutionPolicy Bypass -File Check-SmbShareMount.ps1 -Target \\SERVER\Share -WriteTest   # text
+powershell -ExecutionPolicy Bypass -File Check-SmbShareMount.ps1 -Settings                # dump every SMB setting
 ```
 
-It auto-elevates through UAC when it needs administrator rights (applying a fix or changing settings). Pass `-NoElevate` to skip that. Decline the prompt and it still runs, read-only.
+It auto-elevates through UAC when it is not already administrator. Pass `-NoElevate` to skip that. Decline the prompt and it still runs, read-only.
 
 ## Fixes and settings
 

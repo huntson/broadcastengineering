@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Check-ShareMount.ps1 - explain, in plain language, why a Windows PC can or cannot mount an SMB file share.
+  Check-SmbShareMount.ps1 - explain, in plain language, why a Windows PC can or cannot mount an SMB file share.
 .DESCRIPTION
   Uses ONLY built-in, Microsoft-signed Windows commands (net use, WMI, TcpClient, nbtstat, and
   Test-NetConnection / Get-SmbConnection where present). No hand-crafted network packets, so endpoint
@@ -22,7 +22,7 @@
 .PARAMETER Fix      apply the recommended client-side fix (needs Run as administrator)
 .PARAMETER Gui      show the window (default when no Target is given)
 .EXAMPLE
-  powershell -ExecutionPolicy Bypass -File Check-ShareMount.ps1 -Target \\SERVER\Share -WriteTest
+  powershell -ExecutionPolicy Bypass -File Check-SmbShareMount.ps1 -Target \\SERVER\Share -WriteTest
 .NOTES
   v1.2 2026-09-20. Universal Windows 7 through 11 / Server 2008 R2+. No packet crafting, so it is safe on
   CrowdStrike/Defender/Bitdefender boxes. Replaces the older Test-SmbCompat.ps1.
@@ -41,28 +41,24 @@ param(
   [switch]$NoElevate
 )
 $ErrorActionPreference = 'Continue'
-$ScriptVersion = '1.2'
+$ScriptVersion = '0.1.0'   # keep in sync with check-smb-sharemount/VERSION + CHANGELOG
 
-# ---- auto-elevate: relaunch through UAC as administrator when the task needs it ----
-$amAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-$needAdmin = ($Gui -or (-not $Target) -or $Fix -or $Settings)
-if($needAdmin -and -not $amAdmin -and -not $NoElevate){
-  $selfPath = $MyInvocation.MyCommand.Definition
+# ---- self-elevate: relaunch through UAC as administrator (pattern matches evs-xfile-xsquare) ----
+$principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
+if(-not $NoElevate -and -not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)){
+  $selfPath = $PSCommandPath; if(-not $selfPath){ $selfPath = $MyInvocation.MyCommand.Definition }   # $PSCommandPath is $null on PowerShell 2.0 (Windows 7)
   try {
-    $a = @('-NoProfile','-ExecutionPolicy','Bypass','-STA','-File',('"' + $selfPath + '"'))
-    if($Target){ $a += @('-Target', ('"' + $Target + '"')) }
-    if($Share){ $a += @('-Share', ('"' + $Share + '"')) }
-    if($User){ $a += @('-User', ('"' + $User + '"')) }
-    if($Password){ $a += @('-Password', ('"' + $Password + '"')) }
-    if($WriteTest){ $a += '-WriteTest' }
-    if($Fix){ $a += '-Fix' }
-    if($Force){ $a += '-Force' }
-    if($Gui){ $a += '-Gui' }
-    if($Settings){ $a += '-Settings' }
-    Start-Process -FilePath 'powershell.exe' -Verb RunAs -ArgumentList $a | Out-Null
+    $argList = @('-NoProfile','-ExecutionPolicy','Bypass','-STA','-File',"`"$selfPath`"")
+    foreach($kv in $PSBoundParameters.GetEnumerator()){
+      if($kv.Key -eq 'NoElevate'){ continue }
+      if($kv.Value -is [switch]){ if($kv.Value.IsPresent){ $argList += "-$($kv.Key)" } }
+      else { $argList += "-$($kv.Key)"; $argList += "`"$($kv.Value)`"" }
+    }
+    Write-Host 'Re-launching elevated...' -ForegroundColor Yellow
+    Start-Process powershell.exe -Verb RunAs -ArgumentList $argList
     exit
   } catch {
-    Write-Host 'Running WITHOUT administrator rights (you declined the prompt) - diagnosis works, but applying fixes and changing settings is disabled.' -ForegroundColor Yellow
+    Write-Host 'Running WITHOUT administrator rights (you declined the prompt) - diagnosis works; applying fixes and changing settings is disabled.' -ForegroundColor Yellow
   }
 }
 
@@ -148,7 +144,7 @@ function Invoke-Check([string]$Target,[string]$Share,[string]$User,[string]$Pass
   elseif($t -match '^\\\\([^\\]+)\\?$'){ $HostName=$matches[1] }
   else { $HostName=$t }
   $HostName=$HostName.Trim('\').Trim(); if($Share){ $Share=$Share.Trim('\').Trim() }
-  Emit ('Check-ShareMount v' + $ScriptVersion + '   ' + (Get-Date -Format 'yyyy-MM-dd HH:mm:ss') + '   server=' + $HostName + '  share=' + $Share + '  user=' + $User) 'White'
+  Emit ('Check-SmbShareMount v' + $ScriptVersion + '   ' + (Get-Date -Format 'yyyy-MM-dd HH:mm:ss') + '   server=' + $HostName + '  share=' + $Share + '  user=' + $User) 'White'
 
   # ---- CLIENT
   Sect 'CLIENT (this PC)'
@@ -484,7 +480,7 @@ function Show-Gui([string]$target,[string]$share,[string]$user,[string]$pass){
   Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing
   [System.Windows.Forms.Application]::EnableVisualStyles()
   $f=New-Object System.Windows.Forms.Form
-  $f.Text=('Check Share Mount v' + $ScriptVersion + '  -  why can''t this PC open that shared folder?')
+  $f.Text=('Check SMB Share Mount v' + $ScriptVersion + '  -  why can''t this PC open that shared folder?')
   $f.Size=New-Object System.Drawing.Size(980,700); $f.MinimumSize=New-Object System.Drawing.Size(740,470); $f.StartPosition='CenterScreen'
   $f.Font=New-Object System.Drawing.Font('Segoe UI',9)
   function L($text,$x,$y,$w){ $l=New-Object System.Windows.Forms.Label; $l.Text=$text; $l.Location=New-Object System.Drawing.Point($x,$y); $l.Size=New-Object System.Drawing.Size($w,20); $f.Controls.Add($l); $l }
@@ -508,7 +504,7 @@ function Show-Gui([string]$target,[string]$share,[string]$user,[string]$pass){
   $script:GuiState=@{Form=$f;Rtb=$rtb;Status=$status;BtnFix=$btnFix}
   $runBlock={
     $rtb.Clear(); $btnRun.Enabled=$false; $btnFix.Enabled=$false; $status.Text='checking...'
-    $tg=$tbTarget.Text.Trim(); if(-not $tg){ [void][System.Windows.Forms.MessageBox]::Show('Type the shared folder, like \\SERVER\Share','Check Share Mount'); $btnRun.Enabled=$true; return }
+    $tg=$tbTarget.Text.Trim(); if(-not $tg){ [void][System.Windows.Forms.MessageBox]::Show('Type the shared folder, like \\SERVER\Share','Check SMB Share Mount'); $btnRun.Enabled=$true; return }
     try { Invoke-Check $tg '' $tbUser.Text.Trim() $tbPass.Text 5 ([bool]$cbWrite.Checked) $false $false } catch { Emit ('  tool error: ' + $_.Exception.Message) 'Red' }
     $btnRun.Enabled=$true; $btnFix.Enabled=($script:FixAction -ne $null); $status.Text=$(if($script:LastWhy){ ($script:LastWhy -split '[.:]')[0] }else{'done'})
   }
