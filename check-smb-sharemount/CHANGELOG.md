@@ -3,6 +3,17 @@
 All notable changes to the Check-SmbShareMount SMB share-mount diagnostic.
 Versions follow [semver](https://semver.org); see `../VERSIONING.md`.
 
+## 0.2.1 — 2026-09-20
+
+### Fixed
+- Throughput test now authenticates to the server (via `-User`/`-Password`) before writing, so it works on
+  shares that require credentials; no longer warns about a leftover file that was never created.
+- The window no longer freezes during a network test: ping, MTU search, traceroute and the throughput
+  read/write pump the UI so it stays responsive on slow or lossy links.
+
+### Docs
+- README documents the network metering; in-script help lists `-Settings`, `-Network`, `-ThroughputMB`, `-NoElevate`.
+
 ## 0.2.0 — 2026-09-20
 
 ### Added

@@ -19,6 +19,7 @@ Right-click `Check-SmbShareMount.ps1` and choose **Run with PowerShell** (opens 
 powershell -ExecutionPolicy Bypass -File Check-SmbShareMount.ps1                          # window
 powershell -ExecutionPolicy Bypass -File Check-SmbShareMount.ps1 -Target \\SERVER\Share -WriteTest   # text
 powershell -ExecutionPolicy Bypass -File Check-SmbShareMount.ps1 -Settings                # dump every SMB setting
+powershell -ExecutionPolicy Bypass -File Check-SmbShareMount.ps1 -Network -Target \\SERVER\Share   # network metering
 ```
 
 It auto-elevates through UAC when it is not already administrator. Pass `-NoElevate` to skip that. Decline the prompt and it still runs, read-only.
@@ -27,6 +28,17 @@ It auto-elevates through UAC when it is not already administrator. Pass `-NoElev
 
 - **Apply fix** turns the SMB2/3 client back on, or allows guest shares, when that is the cause. On Windows 10/11 re-enabling the SMB2 client needs a reboot to take effect; the tool says so.
 - **SMB Settings** opens every hidden registry / Group Policy SMB knob (client, server, policy, per-adapter NetBIOS) in one window — change them without regedit or gpedit. Insecure values are flagged.
+
+## Network metering
+
+The **Network...** button (or `-Network`) reports, purely for information with no pass/fail:
+
+- Share throughput: write and read speed in MB/s (`-ThroughputMB` sets the test size, default 256).
+- Ping latency (min / avg / max) and packet loss.
+- Path MTU: the largest un-fragmented frame, i.e. whether jumbo frames pass end to end.
+- Traceroute: the hop path to the server.
+
+Built on the .NET `Ping` API and `FileStream` — still no packet crafting, so endpoint security leaves it alone.
 
 ## Notes
 
