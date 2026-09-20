@@ -3,6 +3,13 @@
 All notable changes to the Check-SmbShareMount SMB share-mount diagnostic.
 Versions follow [semver](https://semver.org); see `../VERSIONING.md`.
 
+## 0.2.0 — 2026-09-20
+
+### Added
+- Network metering (informational, no pass/fail): a **Network...** button and `-Network` switch measure
+  share throughput (write and read MB/s), ping latency and loss, the path MTU (whether jumbo frames pass
+  end to end), and a traceroute. Uses the .NET `Ping` API and `FileStream` — built-in, no packet crafting.
+
 ## 0.1.0 — 2026-09-20
 
 Initial tracked release.

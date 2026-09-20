@@ -38,10 +38,12 @@ param(
   [switch]$Force,
   [switch]$Gui,
   [switch]$Settings,
-  [switch]$NoElevate
+  [switch]$NoElevate,
+  [switch]$Network,
+  [int]$ThroughputMB = 256
 )
 $ErrorActionPreference = 'Continue'
-$ScriptVersion = '0.1.0'   # keep in sync with check-smb-sharemount/VERSION + CHANGELOG
+$ScriptVersion = '0.2.0'   # keep in sync with check-smb-sharemount/VERSION + CHANGELOG
 
 # ---- self-elevate: relaunch through UAC as administrator (pattern matches evs-xfile-xsquare) ----
 $principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
@@ -474,6 +476,96 @@ function Dump-SmbSettings(){
 }
 
 # =====================================================================
+# NETWORK METERING  (informational only - ping / MTU / traceroute / throughput)
+# Uses System.Net.NetworkInformation.Ping (OS ICMP, not raw sockets) + FileStream.
+# PowerShell 2.0 / .NET 2.0 safe; no packet crafting, so endpoint security is fine.
+# =====================================================================
+function Meter-Ping($ip,$count){
+  $p=New-Object System.Net.NetworkInformation.Ping; $rtts=@(); $recv=0
+  for($i=0;$i -lt $count;$i++){ try { $r=$p.Send($ip,1500); if($r.Status -eq 'Success'){ $recv++; $rtts+=[int]$r.RoundtripTime } } catch {} }
+  $res=@{Sent=$count;Recv=$recv;LossPct=[int]((($count-$recv)/$count)*100);Min=$null;Avg=$null;Max=$null}
+  if($rtts.Count){ $res.Min=($rtts|Measure-Object -Minimum).Minimum; $res.Max=($rtts|Measure-Object -Maximum).Maximum; $res.Avg=[Math]::Round((($rtts|Measure-Object -Average).Average),1) }
+  return $res
+}
+function Meter-Mtu($ip){
+  $p=New-Object System.Net.NetworkInformation.Ping
+  $opt=New-Object System.Net.NetworkInformation.PingOptions(64,$true)   # Ttl=64, DontFragment=true
+  $probe=New-Object byte[] 32
+  try { if(($p.Send($ip,1500,$probe,$opt)).Status -ne 'Success'){ return @{Reachable=$false} } } catch { return @{Reachable=$false} }
+  $lo=0; $hi=8972; $best=0
+  while($lo -le $hi){
+    $mid=[int](($lo+$hi)/2); $buf=New-Object byte[] $mid; $ok=$false
+    try { if(($p.Send($ip,1500,$buf,$opt)).Status -eq 'Success'){ $ok=$true } } catch {}
+    if($ok){ $best=$mid; $lo=$mid+1 } else { $hi=$mid-1 }
+  }
+  return @{Reachable=$true;Payload=$best;Mtu=($best+28);Jumbo=(($best+28) -gt 1500)}
+}
+function Meter-Trace($ip,$maxHops){
+  $hops=@(); $p=New-Object System.Net.NetworkInformation.Ping; $buf=New-Object byte[] 32
+  for($ttl=1;$ttl -le $maxHops;$ttl++){
+    $opt=New-Object System.Net.NetworkInformation.PingOptions($ttl,$false)
+    $addr='*'; $ms=$null; $done=$false
+    try { $r=$p.Send($ip,1500,$buf,$opt); if($r.Address){ $addr=$r.Address.ToString() }; if($r.RoundtripTime){ $ms=[int]$r.RoundtripTime }
+          if($r.Status -eq 'Success'){ $done=$true } elseif($r.Status -ne 'TtlExpired' -and $r.Status -ne 'TimedOut'){ $addr=('(' + $r.Status + ')') } } catch {}
+    $hops += (New-Object PSObject -Property @{Ttl=$ttl;Addr=$addr;Ms=$ms})
+    if($done){ break }
+  }
+  return ,$hops
+}
+function Meter-Throughput($shareUnc,$mb){
+  $res=@{Ok=$false}
+  $chunk=New-Object byte[] (8*1024*1024); (New-Object Random).NextBytes($chunk)
+  $tf=$shareUnc + '\_nettest_' + $env:COMPUTERNAME + '_' + (Get-Date -Format 'HHmmss') + '.tmp'
+  $iters=[int][Math]::Ceiling($mb/8.0); if($iters -lt 1){ $iters=1 }
+  $bytes=[int64]$iters * $chunk.Length
+  try {
+    $sw=[System.Diagnostics.Stopwatch]::StartNew(); $fs=[System.IO.File]::Create($tf)
+    for($i=0;$i -lt $iters;$i++){ $fs.Write($chunk,0,$chunk.Length) }
+    $fs.Close(); $sw.Stop()
+    $res.WriteSec=$sw.Elapsed.TotalSeconds; if($res.WriteSec -gt 0){ $res.WriteMBs=(($bytes/1MB)/$res.WriteSec) }
+    $sw2=[System.Diagnostics.Stopwatch]::StartNew(); $fr=[System.IO.File]::OpenRead($tf); $rbuf=New-Object byte[] (8*1024*1024); $tot=[int64]0
+    do { $n=$fr.Read($rbuf,0,$rbuf.Length); $tot+=$n } while($n -gt 0)
+    $fr.Close(); $sw2.Stop()
+    $res.ReadSec=$sw2.Elapsed.TotalSeconds; if($res.ReadSec -gt 0){ $res.ReadMBs=(($tot/1MB)/$res.ReadSec) }
+    $res.Bytes=$bytes; $res.Ok=$true
+  } catch { $res.Err=$_.Exception.Message }
+  try { [System.IO.File]::Delete($tf) } catch { $res.Leftover=$tf }
+  return $res
+}
+function Invoke-Network([string]$Target,[string]$Share,[int]$ThroughputMB){
+  if($ThroughputMB -le 0){ $ThroughputMB=256 }
+  $t=$Target.Trim()
+  if($t -match '^\\\\([^\\]+)\\([^\\]+)'){ $HostName=$matches[1]; if(-not $Share){ $Share=$matches[2] } }
+  elseif($t -match '^\\\\([^\\]+)\\?$'){ $HostName=$matches[1] } else { $HostName=$t }
+  $HostName=$HostName.Trim('\').Trim(); if($Share){ $Share=$Share.Trim('\').Trim() }
+  $ip=$HostName; $tmpAddr=$null
+  if(-not [System.Net.IPAddress]::TryParse($HostName,[ref]$tmpAddr)){
+    try { $ip=(@([System.Net.Dns]::GetHostAddresses($HostName) | Where-Object { $_.AddressFamily -eq 'InterNetwork' }))[0].IPAddressToString } catch { $ip=$null }
+  }
+  Sect ('NETWORK  ' + $HostName + $(if($ip -and $ip -ne $HostName){' (' + $ip + ')'}else{''}) + '   (informational)')
+  if(-not $ip){ Fail ('cannot resolve ' + $HostName + ' to an address'); return }
+  Emit '  measuring...' 'Gray'
+  $pg=Meter-Ping $ip 10
+  if($pg.Recv -gt 0){ Row 'Ping' ('{0}/{1} replies, {2}% loss   min {3} / avg {4} / max {5} ms' -f $pg.Recv,$pg.Sent,$pg.LossPct,$pg.Min,$pg.Avg,$pg.Max) }
+  else { Row 'Ping' ('no replies (' + $pg.LossPct + '% loss) - host may block ICMP') }
+  $mt=Meter-Mtu $ip
+  if($mt.Reachable){ Row 'Path MTU (largest un-fragmented)' ('{0} bytes   {1}' -f $mt.Mtu, $(if($mt.Jumbo){'JUMBO frames pass end-to-end (>1500)'}else{'standard frames (jumbo does NOT pass this path)'})) }
+  else { Note 'MTU probe: host did not answer don''t-fragment pings (ICMP blocked); cannot measure path MTU' }
+  Emit '  route:' 'White'
+  foreach($h in (Meter-Trace $ip 20)){ Emit ('    {0,2}  {1,-16} {2}' -f $h.Ttl, $h.Addr, $(if($h.Ms -ne $null){[string]$h.Ms + ' ms'}else{''})) 'Gray' }
+  if($Share){
+    $unc='\\' + $HostName + '\' + $Share
+    Emit ('  throughput: writing/reading ' + $ThroughputMB + ' MB to ' + $unc + ' ...') 'White'
+    $tp=Meter-Throughput $unc $ThroughputMB
+    if($tp.Ok){
+      Row 'Write speed' ('{0:N1} MB/s  ({1:N1} s for {2} MB)' -f $tp.WriteMBs, $tp.WriteSec, $ThroughputMB)
+      Row 'Read speed'  ('{0:N1} MB/s  ({1:N1} s)  - may be served from cache' -f $tp.ReadMBs, $tp.ReadSec)
+    } else { Warn ('throughput test could not run: ' + $tp.Err) }
+    if($tp.Leftover){ Warn ('could not delete the test file, remove it: ' + $tp.Leftover) }
+  } else { Note 'no share given, so no throughput test (add \\server\share to measure MB/s)' }
+}
+
+# =====================================================================
 # GUI
 # =====================================================================
 function Show-Gui([string]$target,[string]$share,[string]$user,[string]$pass){
@@ -481,7 +573,7 @@ function Show-Gui([string]$target,[string]$share,[string]$user,[string]$pass){
   [System.Windows.Forms.Application]::EnableVisualStyles()
   $f=New-Object System.Windows.Forms.Form
   $f.Text=('Check SMB Share Mount v' + $ScriptVersion + '  -  why can''t this PC open that shared folder?')
-  $f.Size=New-Object System.Drawing.Size(980,700); $f.MinimumSize=New-Object System.Drawing.Size(740,470); $f.StartPosition='CenterScreen'
+  $f.Size=New-Object System.Drawing.Size(1090,700); $f.MinimumSize=New-Object System.Drawing.Size(740,470); $f.StartPosition='CenterScreen'
   $f.Font=New-Object System.Drawing.Font('Segoe UI',9)
   function L($text,$x,$y,$w){ $l=New-Object System.Windows.Forms.Label; $l.Text=$text; $l.Location=New-Object System.Drawing.Point($x,$y); $l.Size=New-Object System.Drawing.Size($w,20); $f.Controls.Add($l); $l }
   function TB($x,$y,$w,$val){ $b=New-Object System.Windows.Forms.TextBox; $b.Location=New-Object System.Drawing.Point($x,$y); $b.Size=New-Object System.Drawing.Size($w,23); $b.Text=$val; $f.Controls.Add($b); $b }
@@ -495,10 +587,11 @@ function Show-Gui([string]$target,[string]$share,[string]$user,[string]$pass){
   # (BT defined above)
   $btnRun=BT 'Check now' 12 110 130; $btnFix=BT 'Apply fix' 150 110 130; $btnFix.Enabled=$false
   $btnCopy=BT 'Copy result' 288 110 110; $btnSave=BT 'Save result...' 404 110 120; $btnClose=BT 'Close' 858 110 90; $btnClose.Anchor='Top,Right'
-  $status=New-Object System.Windows.Forms.Label; $status.Location=New-Object System.Drawing.Point(536,116); $status.Size=New-Object System.Drawing.Size(196,22); $status.Text='pick a mapped drive or type a folder'; $status.Anchor='Top,Left,Right'; $f.Controls.Add($status)
+  $status=New-Object System.Windows.Forms.Label; $status.Location=New-Object System.Drawing.Point(536,116); $status.Size=New-Object System.Drawing.Size(60,22); $status.Text=''; $status.Anchor='Top,Left'; $f.Controls.Add($status)
+  $btnNetwork=BT 'Network...' 606 110 116; $btnNetwork.Anchor='Top,Right'; $btnNetwork.Add_Click({ $btnNetwork.Enabled=$false; $btnRun.Enabled=$false; $status.Text='network metering...'; $tg=$tbTarget.Text.Trim(); if($tg){ try { Invoke-Network $tg '' 256 } catch { Emit ('  network error: ' + $_.Exception.Message) 'Red' } } else { [void][System.Windows.Forms.MessageBox]::Show('Enter a server or \\server\share first','Check SMB Share Mount') }; $btnNetwork.Enabled=$true; $btnRun.Enabled=$true; $status.Text='network test done' })
   $btnSettings=BT 'SMB Settings...' 738 110 118; $btnSettings.Anchor='Top,Right'; $btnSettings.Add_Click({ try { Show-SmbSettings $f } catch { Emit ('  settings error: ' + $_.Exception.Message) 'Red' } })
   $rtb=New-Object System.Windows.Forms.RichTextBox
-  $rtb.Location=New-Object System.Drawing.Point(12,146); $rtb.Size=New-Object System.Drawing.Size(946,506); $rtb.Anchor='Top,Bottom,Left,Right'
+  $rtb.Location=New-Object System.Drawing.Point(12,146); $rtb.Size=New-Object System.Drawing.Size(1056,506); $rtb.Anchor='Top,Bottom,Left,Right'
   $rtb.ReadOnly=$true; $rtb.BackColor=[System.Drawing.Color]::FromArgb(24,24,24); $rtb.ForeColor=[System.Drawing.Color]::WhiteSmoke
   $rtb.Font=New-Object System.Drawing.Font('Consolas',9); $rtb.WordWrap=$false; $rtb.DetectUrls=$false; $rtb.ScrollBars='Both'; $f.Controls.Add($rtb)
   $script:GuiState=@{Form=$f;Rtb=$rtb;Status=$status;BtnFix=$btnFix}
@@ -536,5 +629,6 @@ function Show-Gui([string]$target,[string]$share,[string]$user,[string]$pass){
 # =====================================================================
 if($Settings -and $Gui){ Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing; [System.Windows.Forms.Application]::EnableVisualStyles(); Show-SmbSettings $null }
 elseif($Settings){ $script:Report=New-Object System.Text.StringBuilder; Dump-SmbSettings }
+elseif($Network){ $script:Report=New-Object System.Text.StringBuilder; Invoke-Network $Target $Share $ThroughputMB }
 elseif($Gui -or -not $Target){ Show-Gui $Target $Share $User $Password }
 else { Invoke-Check $Target $Share $User $Password $TimeoutSec ([bool]$WriteTest) ([bool]$Fix) ([bool]$Force) }
